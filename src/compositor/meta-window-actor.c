@@ -2,7 +2,6 @@
 
 #include <config.h>
 
-#define _ISOC99_SOURCE /* for roundf */
 #include <math.h>
 
 #include <X11/extensions/shape.h>
@@ -1697,18 +1696,23 @@ meta_window_actor_set_visible_region (MetaWindowActor *self,
   /* Get the area of the window texture that would be drawn if
    * we weren't obscured at all
    */
-  if (priv->shape_region)
-    texture_clip_region = cairo_region_copy (priv->shape_region);
-  else if (priv->bounding_region)
-    texture_clip_region = cairo_region_copy (priv->bounding_region);
 
-  if (!texture_clip_region)
-    texture_clip_region = cairo_region_create ();
+  texture_clip_region = meta_shaped_texture_get_visible_pixels_region (META_SHAPED_TEXTURE (priv->actor));
 
-  /* Then intersect that with the visible region to get the region
-   * that we actually need to redraw.
-   */
-  cairo_region_intersect (texture_clip_region, visible_region);
+  if (texture_clip_region)
+    {
+      texture_clip_region = cairo_region_copy (texture_clip_region);
+
+      /* Then intersect that with the visible region to get the region
+       * that we actually need to redraw.
+       */
+      cairo_region_intersect (texture_clip_region, visible_region);
+    }
+  else
+    {
+      texture_clip_region = cairo_region_create ();
+    }
+
 
   /* Assumes ownership */
   meta_shaped_texture_set_clip_region (META_SHAPED_TEXTURE (priv->actor),
@@ -1994,11 +1998,103 @@ meta_window_actor_sync_visibility (MetaWindowActor *self)
 }
 
 static void
+update_corners (MetaWindowActor   *self,
+                MetaFrameBorders  *borders)
+{
+  MetaWindowActorPrivate *priv = self->priv;
+  MetaRectangle outer;
+  cairo_rectangle_int_t corner_rects[4];
+  cairo_region_t *corner_region;
+  cairo_path_t *corner_path;
+  float top_left, top_right, bottom_left, bottom_right;
+
+  /* need these to build a path */
+  cairo_t *cr;
+  cairo_surface_t *surface;
+
+  if (!priv->window->frame)
+    return;
+
+  meta_window_get_outer_rect (priv->window, &outer);
+
+  meta_frame_get_corner_radiuses (priv->window->frame,
+                                  &top_left,
+                                  &top_right,
+                                  &bottom_left,
+                                  &bottom_right);
+
+  /* Unfortunately, cairo does not allow us to create a context
+   * without a surface. Create a 0x0 image surface to "paint to"
+   * so we can get the path. */
+  surface = cairo_image_surface_create (CAIRO_FORMAT_A8,
+                                        0, 0);
+
+  cr = cairo_create (surface);
+
+  corner_rects[0].x = floor(borders->invisible.left);
+  corner_rects[0].y = floor(borders->invisible.top);
+  corner_rects[0].width = corner_rects[0].height = ceil(top_left);
+
+  cairo_arc (cr,
+             corner_rects[0].x + top_left,
+             corner_rects[0].y + top_left,
+             top_left,
+             0, M_PI*2);
+
+  /* top right */
+  corner_rects[1].x = floor(borders->invisible.left + outer.width - top_right);
+  corner_rects[1].y = floor(borders->invisible.top);
+  corner_rects[1].width = corner_rects[1].height = ceil(top_right);
+
+  cairo_arc (cr,
+             corner_rects[1].x,
+             corner_rects[1].y + top_right,
+             top_right,
+             0, M_PI*2);
+
+  /* bottom left */
+  corner_rects[2].x = floor(borders->invisible.left);
+  corner_rects[2].y = floor(borders->invisible.top + outer.height - bottom_left);
+  corner_rects[2].width = corner_rects[2].height = ceil(bottom_left);
+
+  cairo_arc (cr,
+             corner_rects[2].x + bottom_left,
+             corner_rects[2].y,
+             bottom_left,
+             0, M_PI*2);
+
+  /* bottom right */
+  corner_rects[3].x = floor(borders->invisible.left + outer.width - bottom_right);
+  corner_rects[3].y = floor(borders->invisible.top + outer.height - bottom_right);
+  corner_rects[3].width = corner_rects[3].height = ceil(bottom_right);
+
+  cairo_arc (cr,
+             corner_rects[3].x,
+             corner_rects[3].y,
+             bottom_right,
+             0, M_PI*2);
+
+  corner_path = cairo_copy_path (cr);
+
+  cairo_surface_destroy (surface);
+  cairo_destroy (cr);
+
+  corner_region = cairo_region_create_rectangles (corner_rects, 4);
+
+  meta_shaped_texture_set_overlay_path (META_SHAPED_TEXTURE (priv->actor),
+                                        corner_region, corner_path);
+
+  cairo_region_destroy (corner_region);
+
+}
+
+static void
 check_needs_reshape (MetaWindowActor *self)
 {
   MetaWindowActorPrivate *priv = self->priv;
   MetaScreen *screen = priv->screen;
   MetaDisplay *display = meta_screen_get_display (screen);
+  MetaFrameBorders borders;
   cairo_region_t *region;
 
   if (!priv->needs_reshape)
@@ -2006,6 +2102,9 @@ check_needs_reshape (MetaWindowActor *self)
 
   meta_shaped_texture_set_shape_region (META_SHAPED_TEXTURE (priv->actor), NULL);
   meta_window_actor_clear_shape_region (self);
+
+  if (priv->window->frame)
+    meta_frame_calc_borders (priv->window->frame, &borders);
 
   region = meta_window_get_frame_bounds (priv->window);
   if (region != NULL)
@@ -2034,9 +2133,6 @@ check_needs_reshape (MetaWindowActor *self)
 
       if (priv->window->frame)
         {
-          MetaFrameBorders borders;
-          meta_frame_calc_borders (priv->window->frame, &borders);
-
           client_area.x = borders.total.left;
           client_area.y = borders.total.top;
         }
@@ -2079,6 +2175,8 @@ check_needs_reshape (MetaWindowActor *self)
   meta_window_actor_update_shape_region (self, region);
 
   cairo_region_destroy (region);
+
+  update_corners (self, &borders);
 
   priv->needs_reshape = FALSE;
   meta_window_actor_invalidate_shadow (self);

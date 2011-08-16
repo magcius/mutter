@@ -925,6 +925,7 @@ void             meta_frame_layout_unref         (MetaFrameLayout       *layout)
 void             meta_frame_layout_get_borders   (const MetaFrameLayout *layout,
                                                   int                    text_height,
                                                   MetaFrameFlags         flags,
+                                                  MetaFrameType          type,
                                                   MetaFrameBorders      *borders);
 void             meta_frame_layout_calc_geometry (const MetaFrameLayout  *layout,
                                                   int                     text_height,
@@ -932,6 +933,7 @@ void             meta_frame_layout_calc_geometry (const MetaFrameLayout  *layout
                                                   int                     client_width,
                                                   int                     client_height,
                                                   const MetaButtonLayout *button_layout,
+                                                  MetaFrameType           type,
                                                   MetaFrameGeometry      *fgeom,
                                                   MetaTheme              *theme);
 
@@ -1084,20 +1086,6 @@ void meta_theme_draw_frame (MetaTheme              *theme,
                             MetaButtonState         button_states[META_BUTTON_TYPE_LAST],
                             GdkPixbuf              *mini_icon,
                             GdkPixbuf              *icon);
-
-void meta_theme_draw_frame_by_name (MetaTheme              *theme,
-                                    GtkWidget              *widget,
-                                    cairo_t                *cr,
-                                    const gchar             *style_name,
-                                    MetaFrameFlags          flags,
-                                    int                     client_width,
-                                    int                     client_height,
-                                    PangoLayout            *title_layout,
-                                    int                     text_height,
-                                    const MetaButtonLayout *button_layout,
-                                    MetaButtonState         button_states[META_BUTTON_TYPE_LAST],
-                                    GdkPixbuf              *mini_icon,
-                                    GdkPixbuf              *icon);
 
 void meta_theme_draw_frame_with_style (MetaTheme              *theme,
                                        GtkStyleContext        *style_gtk,

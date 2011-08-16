@@ -792,7 +792,7 @@ meta_window_place (MetaWindow        *window,
 
           /* put top of child's frame, not top of child's client */
           if (borders)
-            y += borders->visible.top;
+            y += borders->visible.top + borders->invisible.top;
 
           meta_topic (META_DEBUG_PLACEMENT, "Centered window %s over transient parent\n",
                       window->desc);

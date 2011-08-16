@@ -764,9 +764,9 @@ constrain_modal_dialog (MetaWindow         *window,
       y += parent->frame->rect.y;
 
       meta_frame_calc_borders (parent->frame, &borders);
-      y += borders.visible.top;
+      y += borders.visible.top + borders.invisible.top;
 
-      y += info->borders->visible.top;
+      y += info->borders->visible.top + info->borders->invisible.top;
     }
   else
     y = parent->rect.y + info->borders->visible.top;

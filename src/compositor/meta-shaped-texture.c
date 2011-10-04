@@ -25,12 +25,14 @@
 
 #include <config.h>
 
-#include "meta-shaped-texture.h"
+#include <meta/meta-shaped-texture.h>
 #include "meta-texture-tower.h"
 #include "meta-texture-rectangle.h"
 
 #include <clutter/clutter.h>
 #include <cogl/cogl.h>
+#define COGL_ENABLE_EXPERIMENTAL_API
+#include <cogl/cogl-texture-pixmap-x11.h>
 #include <string.h>
 
 static void meta_shaped_texture_dispose  (GObject    *object);
@@ -39,16 +41,20 @@ static void meta_shaped_texture_paint (ClutterActor       *actor);
 static void meta_shaped_texture_pick  (ClutterActor       *actor,
 				       const ClutterColor *color);
 
-static void meta_shaped_texture_update_area (ClutterX11TexturePixmap *texture,
-					     int                      x,
-					     int                      y,
-					     int                      width,
-					     int                      height);
+static void meta_shaped_texture_get_preferred_width (ClutterActor *self,
+                                                     gfloat        for_height,
+                                                     gfloat       *min_width_p,
+                                                     gfloat       *natural_width_p);
+
+static void meta_shaped_texture_get_preferred_height (ClutterActor *self,
+                                                      gfloat        for_width,
+                                                      gfloat       *min_height_p,
+                                                      gfloat       *natural_height_p);
 
 static void meta_shaped_texture_dirty_mask (MetaShapedTexture *stex);
 
 G_DEFINE_TYPE (MetaShapedTexture, meta_shaped_texture,
-               CLUTTER_X11_TYPE_TEXTURE_PIXMAP);
+               CLUTTER_TYPE_ACTOR);
 
 #define META_SHAPED_TEXTURE_GET_PRIVATE(obj) \
   (G_TYPE_INSTANCE_GET_PRIVATE ((obj), META_TYPE_SHAPED_TEXTURE, \
@@ -57,6 +63,8 @@ G_DEFINE_TYPE (MetaShapedTexture, meta_shaped_texture,
 struct _MetaShapedTexturePrivate
 {
   MetaTextureTower *paint_tower;
+  Pixmap pixmap;
+  CoglHandle texture;
   CoglHandle mask_texture;
   CoglHandle material;
   CoglHandle material_unshaped;
@@ -67,6 +75,7 @@ struct _MetaShapedTexturePrivate
   cairo_region_t *overlay_region;
   cairo_path_t *overlay_path;
 
+  guint tex_width, tex_height;
   guint mask_width, mask_height;
 
   guint create_mipmaps : 1;
@@ -77,14 +86,13 @@ meta_shaped_texture_class_init (MetaShapedTextureClass *klass)
 {
   GObjectClass *gobject_class = (GObjectClass *) klass;
   ClutterActorClass *actor_class = (ClutterActorClass *) klass;
-  ClutterX11TexturePixmapClass *x11_texture_class = (ClutterX11TexturePixmapClass *) klass;
 
   gobject_class->dispose = meta_shaped_texture_dispose;
 
+  actor_class->get_preferred_width = meta_shaped_texture_get_preferred_width;
+  actor_class->get_preferred_height = meta_shaped_texture_get_preferred_height;
   actor_class->paint = meta_shaped_texture_paint;
   actor_class->pick = meta_shaped_texture_pick;
-
-  x11_texture_class->update_area = meta_shaped_texture_update_area;
 
   g_type_class_add_private (klass, sizeof (MetaShapedTexturePrivate));
 }
@@ -100,6 +108,7 @@ meta_shaped_texture_init (MetaShapedTexture *self)
   priv->overlay_path = NULL;
   priv->overlay_region = NULL;
   priv->paint_tower = meta_texture_tower_new ();
+  priv->texture = COGL_INVALID_HANDLE;
   priv->mask_texture = COGL_INVALID_HANDLE;
   priv->create_mipmaps = TRUE;
 }
@@ -125,6 +134,11 @@ meta_shaped_texture_dispose (GObject *object)
     {
       cogl_handle_unref (priv->material_unshaped);
       priv->material_unshaped = COGL_INVALID_HANDLE;
+    }
+  if (priv->texture != COGL_INVALID_HANDLE)
+    {
+      cogl_handle_unref (priv->texture);
+      priv->texture = COGL_INVALID_HANDLE;
     }
 
   meta_shaped_texture_set_shape_region (self, NULL);
@@ -209,7 +223,7 @@ meta_shaped_texture_ensure_mask (MetaShapedTexture *stex)
   CoglHandle paint_tex;
   guint tex_width, tex_height;
 
-  paint_tex = clutter_texture_get_cogl_texture (CLUTTER_TEXTURE (stex));
+  paint_tex = priv->texture;
 
   if (paint_tex == COGL_INVALID_HANDLE)
     return;
@@ -345,13 +359,13 @@ meta_shaped_texture_paint (ClutterActor *actor)
   if (priv->create_mipmaps)
     paint_tex = meta_texture_tower_get_paint_texture (priv->paint_tower);
   else
-    paint_tex = clutter_texture_get_cogl_texture (CLUTTER_TEXTURE (stex));
+    paint_tex = priv->texture;
 
   if (paint_tex == COGL_INVALID_HANDLE)
     return;
 
-  tex_width = cogl_texture_get_width (paint_tex);
-  tex_height = cogl_texture_get_height (paint_tex);
+  tex_width = priv->tex_width;
+  tex_height = priv->tex_height;
 
   if (tex_width == 0 || tex_height == 0) /* no contents yet */
     return;
@@ -464,17 +478,13 @@ meta_shaped_texture_pick (ClutterActor       *actor,
   MetaShapedTexture *stex = (MetaShapedTexture *) actor;
   MetaShapedTexturePrivate *priv = stex->priv;
 
-  /* If there is no region then use the regular pick */
-  if (priv->shape_region == NULL)
-    CLUTTER_ACTOR_CLASS (meta_shaped_texture_parent_class)
-      ->pick (actor, color);
-  else if (clutter_actor_should_pick_paint (actor))
+  if (clutter_actor_should_pick_paint (actor))
     {
       CoglHandle paint_tex;
       ClutterActorBox alloc;
       guint tex_width, tex_height;
 
-      paint_tex = clutter_texture_get_cogl_texture (CLUTTER_TEXTURE (stex));
+      paint_tex = priv->texture;
 
       if (paint_tex == COGL_INVALID_HANDLE)
         return;
@@ -502,19 +512,41 @@ meta_shaped_texture_pick (ClutterActor       *actor,
 }
 
 static void
-meta_shaped_texture_update_area (ClutterX11TexturePixmap *texture,
-				 int                      x,
-				 int                      y,
-				 int                      width,
-				 int                      height)
+meta_shaped_texture_get_preferred_width (ClutterActor *self,
+                                         gfloat        for_height,
+                                         gfloat       *min_width_p,
+                                         gfloat       *natural_width_p)
 {
-  MetaShapedTexture *stex = (MetaShapedTexture *) texture;
-  MetaShapedTexturePrivate *priv = stex->priv;
+  MetaShapedTexturePrivate *priv;
 
-  CLUTTER_X11_TEXTURE_PIXMAP_CLASS (meta_shaped_texture_parent_class)->update_area (texture,
-                                                                                      x, y, width, height);
+  g_return_if_fail (META_IS_SHAPED_TEXTURE (self));
 
-  meta_texture_tower_update_area (priv->paint_tower, x, y, width, height);
+  priv = META_SHAPED_TEXTURE (self)->priv;
+
+  if (min_width_p)
+    *min_width_p = 0;
+
+  if (natural_width_p)
+    *natural_width_p = priv->tex_width;
+}
+
+static void
+meta_shaped_texture_get_preferred_height (ClutterActor *self,
+                                          gfloat        for_width,
+                                          gfloat       *min_height_p,
+                                          gfloat       *natural_height_p)
+{
+  MetaShapedTexturePrivate *priv;
+
+  g_return_if_fail (META_IS_SHAPED_TEXTURE (self));
+
+  priv = META_SHAPED_TEXTURE (self)->priv;
+
+  if (min_height_p)
+    *min_height_p = 0;
+
+  if (natural_height_p)
+    *natural_height_p = priv->tex_height;
 }
 
 ClutterActor *
@@ -538,50 +570,7 @@ meta_shaped_texture_set_create_mipmaps (MetaShapedTexture *stex,
   create_mipmaps = create_mipmaps != FALSE;
 
   if (create_mipmaps != priv->create_mipmaps)
-    {
-      CoglHandle base_texture;
-
-      priv->create_mipmaps = create_mipmaps;
-
-      base_texture = create_mipmaps ?
-	clutter_texture_get_cogl_texture (CLUTTER_TEXTURE (stex)) : COGL_INVALID_HANDLE;
-
-      meta_texture_tower_set_base_texture (priv->paint_tower, base_texture);
-    }
-}
-
-/* This is a workaround for deficiencies in the hack tower:
- *
- * When we call clutter_x11_texture_pixmap_set_pixmap(tp, None),
- * ClutterX11TexturePixmap knows that it has to get rid of the old texture, but
- * clutter_texture_set_cogl_texture(texture, COGL_INVALID_HANDLE) isn't allowed, so
- * it grabs the material for the texture and manually sets the texture in it. This means
- * that the "cogl-texture" property isn't notified, so we don't find out about it.
- *
- * And if we keep the CoglX11TexturePixmap around after the X pixmap is freed, then
- * we'll trigger X errors when we actually try to free it.
- *
- * The only correct thing to do here is to change our code to derive
- * from ClutterActor and get rid of the inheritance hack tower.  Once
- * we want to depend on Clutter-1.4 (which has CoglTexturePixmapX11),
- * that will be very easy to do.
- */
-void
-meta_shaped_texture_clear (MetaShapedTexture *stex)
-{
-  MetaShapedTexturePrivate *priv;
-
-  g_return_if_fail (META_IS_SHAPED_TEXTURE (stex));
-
-  priv = stex->priv;
-
-  meta_texture_tower_set_base_texture (priv->paint_tower, COGL_INVALID_HANDLE);
-
-  if (priv->material != COGL_INVALID_HANDLE)
-    cogl_material_set_layer (priv->material, 0, COGL_INVALID_HANDLE);
-
-  if (priv->material_unshaped != COGL_INVALID_HANDLE)
-    cogl_material_set_layer (priv->material_unshaped, 0, COGL_INVALID_HANDLE);
+    meta_texture_tower_set_base_texture (priv->paint_tower, priv->texture);
 }
 
 void
@@ -610,13 +599,115 @@ meta_shaped_texture_set_shape_region (MetaShapedTexture *stex,
   clutter_actor_queue_redraw (CLUTTER_ACTOR (stex));
 }
 
+void
+meta_shaped_texture_update_area (MetaShapedTexture *stex,
+				 int                x,
+				 int                y,
+				 int                width,
+				 int                height)
+{
+  MetaShapedTexturePrivate *priv;
+  const cairo_rectangle_int_t clip = { x, y, width, height };
+
+  priv = stex->priv;
+
+  if (priv->texture == COGL_INVALID_HANDLE)
+    return;
+
+  cogl_texture_pixmap_x11_update_area (priv->texture, x, y, width, height);
+
+  meta_texture_tower_update_area (priv->paint_tower, x, y, width, height);
+
+  clutter_actor_queue_redraw_with_clip (CLUTTER_ACTOR (stex), &clip);
+}
+
+static void
+set_cogl_texture (MetaShapedTexture *stex,
+                  CoglHandle         cogl_tex)
+{
+  MetaShapedTexturePrivate *priv;
+  guint width, height;
+
+  g_return_if_fail (META_IS_SHAPED_TEXTURE (stex));
+
+  priv = stex->priv;
+
+  if (priv->texture != COGL_INVALID_HANDLE)
+    cogl_handle_unref (priv->texture);
+
+  priv->texture = cogl_tex;
+
+  if (priv->material != COGL_INVALID_HANDLE)
+    cogl_material_set_layer (priv->material, 0, cogl_tex);
+
+  if (priv->material_unshaped != COGL_INVALID_HANDLE)
+    cogl_material_set_layer (priv->material_unshaped, 0, cogl_tex);
+
+  if (G_LIKELY (cogl_tex != COGL_INVALID_HANDLE))
+    {
+      width = cogl_texture_get_width (cogl_tex);
+      height = cogl_texture_get_height (cogl_tex);
+
+      if (width != priv->tex_width ||
+          height != priv->tex_height)
+        {
+          priv->tex_width = width;
+          priv->tex_height = height;
+
+          clutter_actor_queue_relayout (CLUTTER_ACTOR (stex));
+        }
+    }
+  else
+    {
+      /* size changed to 0 going to an invalid handle */
+      priv->tex_width = 0;
+      priv->tex_height = 0;
+      clutter_actor_queue_relayout (CLUTTER_ACTOR (stex));
+    }
+
+  clutter_actor_queue_redraw (CLUTTER_ACTOR (stex));
+}
+
+/**
+ * meta_shaped_texture_set_pixmap:
+ * @stex: The #MetaShapedTexture
+ * @pixmap: The pixmap you want the stex to assume
+ *
+ * Returns: (transfer none): a #CoglHandle for the pixmap
+ */
+CoglHandle
+meta_shaped_texture_set_pixmap (MetaShapedTexture *stex,
+                                Pixmap             pixmap)
+{
+  MetaShapedTexturePrivate *priv;
+
+  g_return_val_if_fail (META_IS_SHAPED_TEXTURE (stex), COGL_INVALID_HANDLE);
+
+  priv = stex->priv;
+
+  if (priv->pixmap == pixmap)
+    return priv->texture;
+
+  priv->pixmap = pixmap;
+
+  if (pixmap != None)
+    set_cogl_texture (stex, cogl_texture_pixmap_x11_new (pixmap, FALSE));
+  else
+    set_cogl_texture (stex, COGL_INVALID_HANDLE);
+
+  if (priv->create_mipmaps)
+    meta_texture_tower_set_base_texture (priv->paint_tower, priv->texture);
+
+  return priv->texture;
+}
+
 /**
  * meta_shaped_texture_set_overlay_path:
  * @stex: a #MetaShapedTexture
  * @overlay_region: A region containing the parts of the mask to overlay.
  *   All rectangles in this region are wiped clear to full transparency,
  *   and the overlay path is clipped to this region.
- * @overlay_path (transfer full): This path will be painted onto the mask
+ * @overlay_path: (transfer full): This path will be painted onto the mask
  *   texture with a fully opaque source. Due to the lack of refcounting
  *   in #cairo_path_t, ownership of the path is assumed.
  */
@@ -654,7 +745,7 @@ meta_shaped_texture_set_overlay_path (MetaShapedTexture *stex,
 
 /**
  * meta_shaped_texture_set_clip_region:
- * @frame: a #MetaShapedTexture
+ * @stex: a #MetaShapedTexture
  * @clip_region: (transfer full): the region of the texture that
  *   is visible and should be painted. OWNERSHIP IS ASSUMED BY
  *   THE FUNCTION (for efficiency to avoid a copy.)
@@ -685,3 +776,24 @@ meta_shaped_texture_set_clip_region (MetaShapedTexture *stex,
 
   priv->clip_region = clip_region;
 }
+
+/**
+ * meta_shaped_texture_get_size:
+ * @stex: A #MetaShapedTexture
+ * @width: (out): The width of the stex.
+ * @height: (out): The height of the stex.
+ */
+void
+meta_shaped_texture_get_size (MetaShapedTexture *stex,
+                              guint             *width,
+                              guint             *height)
+{
+  CoglHandle texture;
+  g_return_if_fail (META_IS_SHAPED_TEXTURE (stex));
+  texture = stex->priv->texture;
+  if (width)
+    *width = cogl_texture_get_width (texture);
+  if (height)
+    *height = cogl_texture_get_height (texture);
+}
+

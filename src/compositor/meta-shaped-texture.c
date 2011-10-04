@@ -34,8 +34,6 @@
 #include <string.h>
 
 static void meta_shaped_texture_dispose  (GObject    *object);
-static void meta_shaped_texture_notify   (GObject    *object,
-					  GParamSpec *pspec);
 
 static void meta_shaped_texture_paint (ClutterActor       *actor);
 static void meta_shaped_texture_pick  (ClutterActor       *actor,
@@ -82,7 +80,6 @@ meta_shaped_texture_class_init (MetaShapedTextureClass *klass)
   ClutterX11TexturePixmapClass *x11_texture_class = (ClutterX11TexturePixmapClass *) klass;
 
   gobject_class->dispose = meta_shaped_texture_dispose;
-  gobject_class->notify = meta_shaped_texture_notify;
 
   actor_class->paint = meta_shaped_texture_paint;
   actor_class->pick = meta_shaped_texture_pick;
@@ -135,31 +132,6 @@ meta_shaped_texture_dispose (GObject *object)
   meta_shaped_texture_set_overlay_path (self, NULL, NULL);
 
   G_OBJECT_CLASS (meta_shaped_texture_parent_class)->dispose (object);
-}
-
-static void
-meta_shaped_texture_notify (GObject    *object,
-			    GParamSpec *pspec)
-{
-  if (G_OBJECT_CLASS (meta_shaped_texture_parent_class)->notify)
-    G_OBJECT_CLASS (meta_shaped_texture_parent_class)->notify (object, pspec);
-
-  /* It seems like we could just do this out of update_area(), but unfortunately,
-   * clutter_glx_texture_pixmap() doesn't call through the vtable on the
-   * initial update_area, so we need to look for changes to the texture
-   * explicitly.
-   */
-  if (strcmp (pspec->name, "cogl-texture") == 0)
-    {
-      MetaShapedTexture *stex = (MetaShapedTexture *) object;
-      MetaShapedTexturePrivate *priv = stex->priv;
-
-      meta_shaped_texture_clear (stex);
-
-      if (priv->create_mipmaps)
-	meta_texture_tower_set_base_texture (priv->paint_tower,
-					       clutter_texture_get_cogl_texture (CLUTTER_TEXTURE (stex)));
-    }
 }
 
 static void

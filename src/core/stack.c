@@ -180,9 +180,34 @@ meta_stack_update_transient (MetaStack  *stack,
 void
 meta_stack_raise (MetaStack  *stack,
                   MetaWindow *window)
-{  
-  meta_window_set_stack_position_no_sync (window,
-                                          stack->n_positions - 1);
+{
+  if (meta_window_is_on_all_workspaces (window))
+    {
+      meta_window_set_stack_position_no_sync (window,
+                                              stack->n_positions - 1);
+    }
+  else
+    {
+      GList *l;
+      int max_stack_position;
+      max_stack_position = -1;
+
+      l = stack->sorted;
+      while (l != NULL)
+        {
+          MetaWindow *w = (MetaWindow *) l->data;
+          if (w->workspace == window->workspace && w->stack_position > max_stack_position)
+            max_stack_position = w->stack_position;
+
+          l = l->next;
+        }
+
+      if (max_stack_position == -1)
+        max_stack_position = stack->n_positions - 1;
+
+      meta_window_set_stack_position_no_sync (window,
+                                              max_stack_position);
+    }
   
   stack_sync_to_server (stack);
 }
@@ -191,7 +216,32 @@ void
 meta_stack_lower (MetaStack  *stack,
                   MetaWindow *window)
 {
-  meta_window_set_stack_position_no_sync (window, 0);
+  if (meta_window_is_on_all_workspaces (window))
+    {
+      meta_window_set_stack_position_no_sync (window, 0);
+    }
+  else
+    {
+      GList *l;
+      int min_stack_position;
+      min_stack_position = 99999;
+
+      l = stack->sorted;
+      while (l != NULL)
+        {
+          MetaWindow *w = (MetaWindow *) l->data;
+          if (w->workspace == window->workspace && w->stack_position < min_stack_position)
+            min_stack_position = w->stack_position;
+
+          l = l->next;
+        }
+
+      if (min_stack_position == 99999)
+        min_stack_position = 0;
+
+      meta_window_set_stack_position_no_sync (window,
+                                              min_stack_position);
+    }
   
   stack_sync_to_server (stack);
 }

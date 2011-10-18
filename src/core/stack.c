@@ -1361,6 +1361,33 @@ meta_stack_get_top (MetaStack *stack)
 }
 
 MetaWindow*
+meta_stack_get_top_on_workspace (MetaStack     *stack,
+                                 MetaWorkspace *workspace)
+{
+  GList *windows;
+
+  stack_ensure_sorted (stack);
+
+  windows = stack->sorted;
+  while (windows != NULL)
+    {
+      MetaWindow *window;
+
+      window = windows->data;
+
+      if (window == NULL)
+        return NULL;
+
+      if (window->workspace == workspace || window->on_all_workspaces)
+        return window;
+
+      windows = windows->next;
+    }
+
+  return NULL;
+}
+
+MetaWindow*
 meta_stack_get_bottom (MetaStack  *stack)
 {
   GList *link;

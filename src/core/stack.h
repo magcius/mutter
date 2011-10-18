@@ -227,6 +227,16 @@ void       meta_stack_thaw      (MetaStack      *stack);
 MetaWindow* meta_stack_get_top    (MetaStack  *stack);
 
 /**
+ * Finds the most top window on the stack on the specified workspace.
+ *
+ * \param stack  The stack to examine.
+ * \return The top window on the stack, or NULL in the vanishingly unlikely
+ *         event that you have no windows on your screen whatsoever.
+ */
+MetaWindow* meta_stack_get_top_on_workspace (MetaStack     *stack,
+                                             MetaWorkspace *workspace);
+
+/**
  * Finds the window at the bottom of the stack.  Since that's pretty much
  * always the desktop, this isn't the most useful of functions, and nobody
  * actually calls it.  We should probably get rid of it.

@@ -351,8 +351,6 @@ static void
 enable_compositor (MetaDisplay *display,
                    gboolean     composite_windows)
 {
-  GSList *list;
-
   if (!META_DISPLAY_HAS_COMPOSITE (display) ||
       !META_DISPLAY_HAS_DAMAGE (display) ||
       !META_DISPLAY_HAS_XFIXES (display) ||
@@ -370,17 +368,15 @@ enable_compositor (MetaDisplay *display,
 
   if (!display->compositor)
     return;
-  
-  for (list = display->screens; list != NULL; list = list->next)
-    {
-      MetaScreen *screen = list->data;
-      
-      meta_compositor_manage_screen (screen->display->compositor,
-				     screen);
 
-      if (composite_windows)
-        meta_screen_composite_all_windows (screen);
-    }
+  /* Only manage the first screen. */
+  MetaScreen *screen = display->screens->data;
+
+  meta_compositor_manage_screen (screen->display->compositor,
+                                 screen);
+
+  if (composite_windows)
+    meta_screen_composite_all_windows (screen);
 }
 
 static void

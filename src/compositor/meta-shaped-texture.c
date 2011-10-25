@@ -393,8 +393,11 @@ meta_shaped_texture_paint (ClutterActor *actor)
 	    {
 	      material_template =  cogl_material_new ();
 	      cogl_material_set_layer_combine (material_template, 1,
-					   "RGBA = MODULATE (PREVIOUS, TEXTURE[A])",
-					   NULL);
+                                               "RGBA = MODULATE (PREVIOUS, TEXTURE[A])",
+                                               NULL);
+              cogl_material_set_layer_filters (material_template, 1,
+                                               COGL_MATERIAL_FILTER_LINEAR,
+                                               COGL_MATERIAL_FILTER_NEAREST);
 	    }
 	  priv->material = cogl_material_copy (material_template);
 	}

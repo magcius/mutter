@@ -3477,20 +3477,6 @@ draw_op_as_pixbuf (const MetaDrawOp    *op,
         break;
       }
     case META_DRAW_ICON:
-      if (info->mini_icon &&
-          width <= gdk_pixbuf_get_width (info->mini_icon) &&
-          height <= gdk_pixbuf_get_height (info->mini_icon))
-        pixbuf = scale_and_alpha_pixbuf (info->mini_icon,
-                                         op->data.icon.fill_type,
-                                         width, height,
-                                         FALSE, FALSE);
-      else if (info->icon)
-        pixbuf = scale_and_alpha_pixbuf (info->icon,
-                                         op->data.icon.fill_type,
-                                         width, height,
-                                         FALSE, FALSE);
-      break;
-
     case META_DRAW_LINE:
     case META_DRAW_RECTANGLE:
     case META_DRAW_ARC:
@@ -3506,6 +3492,50 @@ draw_op_as_pixbuf (const MetaDrawOp    *op,
     }
 
   return pixbuf;
+}
+
+static void
+draw_image (cairo_t           *cr,
+            GdkPixbuf         *src,
+            MetaImageFillType  fill_type,
+            int                x,
+            int                y,
+            int                width,
+            int                height)
+{
+  gdk_cairo_set_source_pixbuf (cr, src, 0, 0);
+  cairo_save (cr);
+
+  if (fill_type == META_IMAGE_FILL_TILE)
+    {
+      cairo_pattern_set_extend (cairo_get_source (cr),
+                                CAIRO_EXTEND_REPEAT);
+    }
+  else
+    {
+      cairo_pattern_t *pat;
+      cairo_matrix_t mat;
+
+      float swidth, sheight;
+
+      swidth = gdk_pixbuf_get_width (src);
+      sheight = gdk_pixbuf_get_height (src);
+
+      pat = cairo_get_source (cr);
+      cairo_pattern_get_matrix (pat, &mat);
+
+      cairo_matrix_scale (&mat,
+                          swidth / (width - x),
+                          sheight / (height - y));
+      cairo_matrix_translate (&mat, -x, -y);
+
+      cairo_pattern_set_matrix (pat, &mat);
+    }
+
+  cairo_rectangle (cr, x, y, width, height);
+  cairo_fill (cr);
+
+  cairo_restore (cr);
 }
 
 static void
@@ -3879,24 +3909,26 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
     case META_DRAW_ICON:
       {
         int rx, ry, rwidth, rheight;
-        GdkPixbuf *pixbuf;
+        GdkPixbuf *src;
 
         rwidth = parse_size_unchecked (op->data.icon.width, env);
         rheight = parse_size_unchecked (op->data.icon.height, env);
-        
-        pixbuf = draw_op_as_pixbuf (op, style_gtk, info,
-                                    rwidth, rheight);
 
-        if (pixbuf)
-          {
-            rx = parse_x_position_unchecked (op->data.icon.x, env);
-            ry = parse_y_position_unchecked (op->data.icon.y, env);
+        if (info->mini_icon &&
+            rwidth < gdk_pixbuf_get_width (info->mini_icon) &&
+            rheight < gdk_pixbuf_get_height (info->mini_icon))
+          src = info->mini_icon;
+        else if (info->icon)
+          src = info->icon;
+        else
+          break;
 
-            gdk_cairo_set_source_pixbuf (cr, pixbuf, rx, ry);
-            cairo_paint (cr);
+        rx = parse_x_position_unchecked (op->data.icon.x, env);
+        ry = parse_y_position_unchecked (op->data.icon.y, env);
 
-            g_object_unref (G_OBJECT (pixbuf));
-          }
+        draw_image (cr, src,
+                    op->data.icon.fill_type,
+                    rwidth, rheight, rx, ry);
       }
       break;
 

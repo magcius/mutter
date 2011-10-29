@@ -3466,14 +3466,6 @@ draw_op_as_pixbuf (const MetaDrawOp    *op,
                                                  op->data.image.horizontal_stripes);
               }
 	  }
-	else
-	  {
-	    pixbuf = scale_and_alpha_pixbuf (op->data.image.pixbuf,
-                                             op->data.image.fill_type,
-                                             width, height,
-                                             op->data.image.vertical_stripes,
-                                             op->data.image.horizontal_stripes);
-	  }
         break;
       }
     case META_DRAW_ICON:
@@ -3824,21 +3816,32 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
             env->object_height = gdk_pixbuf_get_height (op->data.image.pixbuf);
           }
 
+        rx = parse_x_position_unchecked (op->data.image.x, env);
+        ry = parse_y_position_unchecked (op->data.image.y, env);
+
         rwidth = parse_size_unchecked (op->data.image.width, env);
         rheight = parse_size_unchecked (op->data.image.height, env);
-        
-        pixbuf = draw_op_as_pixbuf (op, style_gtk, info,
-                                    rwidth, rheight);
 
-        if (pixbuf)
+        if (op->data.image.pixbuf != NULL &&
+            op->data.image.colorize_spec == NULL)
           {
-            rx = parse_x_position_unchecked (op->data.image.x, env);
-            ry = parse_y_position_unchecked (op->data.image.y, env);
+            draw_image (cr,
+                        op->data.image.pixbuf,
+                        op->data.image.fill_type,
+                        rx, ry, rwidth, rheight);
+          }
+        else if (op->data.image.colorize_spec != NULL)
+          {
+            pixbuf = draw_op_as_pixbuf (op, style_gtk, info,
+                                        rwidth, rheight);
 
-            gdk_cairo_set_source_pixbuf (cr, pixbuf, rx, ry);
-            cairo_paint (cr);
+            if (pixbuf)
+              {
+                gdk_cairo_set_source_pixbuf (cr, pixbuf, rx, ry);
+                cairo_paint (cr);
 
-            g_object_unref (G_OBJECT (pixbuf));
+                g_object_unref (G_OBJECT (pixbuf));
+              }
           }
       }
       break;

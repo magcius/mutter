@@ -25,13 +25,13 @@
 #include "fixedtip.h"
 #include "ui.h"
 
-/**
+/*
  * The floating rectangle.  This is a GtkWindow, and it contains
  * the "label" widget, below.
  */
 static GtkWidget *tip = NULL;
 
-/**
+/*
  * The actual text that gets displayed.
  */
 static GtkWidget *label = NULL;

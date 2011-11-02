@@ -25,9 +25,10 @@
  */
 
 /**
- * \file display.c Handles operations on an X display.
+ * SECTION:Display
+ * @short_description Handles operations on an X display.
  *
- * The display is represented as a MetaDisplay struct.
+ * The display is represented as a #MetaDisplay struct.
  */
 
 #define _XOPEN_SOURCE 600 /* for gethostname() */

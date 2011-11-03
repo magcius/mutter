@@ -4122,8 +4122,6 @@ window_activate (MetaWindow     *window,
       timestamp = meta_display_get_current_time_roundtrip (window->display);
     }
 
-  meta_window_set_user_time (window, timestamp);
-
   /* disable show desktop mode unless we're a desktop component */
   maybe_leave_show_desktop_mode (window);
 
@@ -4147,6 +4145,8 @@ window_activate (MetaWindow     *window,
          the source window.  */
     meta_window_change_workspace (window, workspace);
     }
+
+  meta_window_set_user_time (window, timestamp);
 
   if (window->shaded)
     meta_window_unshade (window, timestamp);

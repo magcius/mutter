@@ -797,3 +797,88 @@ meta_shaped_texture_get_size (MetaShapedTexture *stex,
     *height = cogl_texture_get_height (texture);
 }
 
+#if 0
+static void
+dump_mask (guint8 *mask_data,
+           guint   width,
+           guint   height)
+{
+  cairo_surface_t *surf;
+  guint8 *data;
+  gsize i;
+
+  surf = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+                                     width, height);
+  data = cairo_image_surface_get_data (surf);
+
+  for (i = 0; i < width*height; i++)
+    {
+      data[i*4+0] = 255;
+      data[i*4+1] = mask_data[i];
+      data[i*4+2] = mask_data[i];
+      data[i*4+3] = mask_data[i];
+    }
+
+  cairo_surface_mark_dirty (surf);
+  cairo_surface_write_to_png (surf, "mask-test.png");
+  cairo_surface_destroy (surf);
+}
+#endif
+
+/**
+ * meta_shaped_texture_as_flattened_data:
+ * @stex: A #MetaShapedTexture
+ * @clip: A clipping rectangle, to help prevent extra processing
+ * @data: A valid pointer to omit the texture data to. This pointer
+ * should be a memory block of at least width * height * 4, as this
+ * method uses %CLUTTER_CAIRO_FORMAT_ARGB32.
+ */
+void
+meta_shaped_texture_as_flattened_data (MetaShapedTexture     *stex,
+                                       cairo_rectangle_int_t *clip,
+                                       guint8                *data)
+{
+  CoglHandle texture, mask_texture;
+
+  g_return_if_fail (META_IS_SHAPED_TEXTURE (stex));
+
+  texture = stex->priv->texture;
+
+  if (clip != NULL)
+    texture = cogl_texture_new_from_sub_texture (texture,
+                                                 clip->x,
+                                                 clip->y,
+                                                 clip->width,
+                                                 clip->height);
+  cogl_flush();
+
+  cogl_texture_get_data (texture, CLUTTER_CAIRO_FORMAT_ARGB32, 0, data);
+
+  mask_texture = stex->priv->mask_texture;
+  if (mask_texture != COGL_INVALID_HANDLE)
+    {
+      guint8 *mask_data;
+      gsize amount, i;
+
+      if (clip != NULL)
+        mask_texture = cogl_texture_new_from_sub_texture (mask_texture,
+                                                          clip->x,
+                                                          clip->y,
+                                                          clip->width,
+                                                          clip->height);
+
+      amount = cogl_texture_get_width (mask_texture) * cogl_texture_get_height (mask_texture);
+      mask_data = g_newa (guint8, amount);
+
+      cogl_texture_get_data (mask_texture, COGL_PIXEL_FORMAT_A_8, 0, mask_data);
+
+      /* Apply the alpha channel to the data. */
+      for (i = 0; i < amount; i++)
+        {
+          data[i*4+0] *= mask_data[i] / 255.0;
+          data[i*4+1] *= mask_data[i] / 255.0;
+          data[i*4+2] *= mask_data[i] / 255.0;
+          data[i*4+3] *= mask_data[i] / 255.0;
+        }
+    }
+}

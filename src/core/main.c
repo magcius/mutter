@@ -369,8 +369,6 @@ meta_init (void)
   struct sigaction act;
   sigset_t empty_mask;
   GIOChannel *channel;
-
-  g_type_init ();
   
   sigemptyset (&empty_mask);
   act.sa_handler = SIG_IGN;

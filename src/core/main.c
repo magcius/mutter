@@ -92,8 +92,7 @@ static void prefs_changed_callback (MetaPreference pref,
                                     gpointer       data);
 
 /**
- * Prints log messages. If Mutter was compiled with backtrace support,
- * also prints a backtrace (see meta_print_backtrace()).
+ * Prints log messages.
  *
  * \param log_domain  the domain the error occurred in (we ignore this)
  * \param log_level   the log level so that we can filter out less
@@ -108,7 +107,6 @@ log_handler (const gchar   *log_domain,
              gpointer       user_data)
 {
   meta_warning ("Log level %d: %s\n", log_level, message);
-  meta_print_backtrace ();
 }
 
 /**

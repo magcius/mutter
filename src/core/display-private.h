@@ -387,10 +387,6 @@ void     meta_display_set_grab_op_cursor (MetaDisplay *display,
 void    meta_display_check_threshold_reached (MetaDisplay *display,
                                               int          x,
                                               int          y);
-void     meta_display_grab_window_buttons    (MetaDisplay *display,
-                                              Window       xwindow);
-void     meta_display_ungrab_window_buttons  (MetaDisplay *display,
-                                              Window       xwindow);
 
 void meta_display_grab_focus_window_button   (MetaDisplay *display,
                                               MetaWindow  *window);

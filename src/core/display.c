@@ -3874,82 +3874,6 @@ meta_change_button_grab (MetaDisplay *display,
   meta_error_trap_pop (display);
 }
 
-void
-meta_display_grab_window_buttons (MetaDisplay *display,
-                                  Window       xwindow)
-{  
-  /* Grab Alt + button1 for moving window.
-   * Grab Alt + button2 for resizing window.
-   * Grab Alt + button3 for popping up window menu.
-   * Grab Alt + Shift + button1 for snap-moving window.
-   */
-  meta_verbose ("Grabbing window buttons for 0x%lx\n", xwindow);
-  
-  /* FIXME If we ignored errors here instead of spewing, we could
-   * put one big error trap around the loop and avoid a bunch of
-   * XSync()
-   */
-
-  if (display->window_grab_modifiers != 0)
-    {
-      gboolean debug = g_getenv ("MUTTER_DEBUG_BUTTON_GRABS") != NULL;
-      int i;
-      for (i = 1; i < 4; i++)
-        {
-          meta_change_button_grab (display, xwindow,
-                                   TRUE,
-                                   FALSE,
-                                   i, display->window_grab_modifiers);  
-          
-          /* This is for debugging, since I end up moving the Xnest
-           * otherwise ;-)
-           */
-          if (debug)
-            meta_change_button_grab (display, xwindow,
-                                     TRUE,
-                                     FALSE,
-                                     i, ControlMask);
-        }
-
-      /* In addition to grabbing Alt+Button1 for moving the window,
-       * grab Alt+Shift+Button1 for snap-moving the window.  See bug
-       * 112478.  Unfortunately, this doesn't work with
-       * Shift+Alt+Button1 for some reason; so at least part of the
-       * order still matters, which sucks (please FIXME).
-       */
-      meta_change_button_grab (display, xwindow,
-                               TRUE,
-                               FALSE,
-                               1, display->window_grab_modifiers | ShiftMask);
-    }
-}
-
-void
-meta_display_ungrab_window_buttons  (MetaDisplay *display,
-                                     Window       xwindow)
-{
-  gboolean debug;
-  int i;
-
-  if (display->window_grab_modifiers == 0)
-    return;
-  
-  debug = g_getenv ("MUTTER_DEBUG_BUTTON_GRABS") != NULL;
-  i = 1;
-  while (i < 4)
-    {
-      meta_change_button_grab (display, xwindow,
-                               FALSE, FALSE, i,
-                               display->window_grab_modifiers);
-      
-      if (debug)
-        meta_change_button_grab (display, xwindow,
-                                 FALSE, FALSE, i, ControlMask);
-      
-      ++i;
-    }
-}
-
 /* Grab buttons we only grab while unfocused in click-to-focus mode */
 #define MAX_FOCUS_BUTTON 4
 void
@@ -5125,13 +5049,10 @@ prefs_changed_callback (MetaPreference pref,
       windows = meta_display_list_windows (display, META_LIST_DEFAULT);
       
       /* Ungrab all */
-      tmp = windows;
-      while (tmp != NULL)
+      for (tmp = windows; tmp != NULL; tmp = tmp->next)
         {
           MetaWindow *w = tmp->data;
-          meta_display_ungrab_window_buttons (display, w->xwindow);
           meta_display_ungrab_focus_window_button (display, w);
-          tmp = tmp->next;
         }
 
       /* change our modifier */
@@ -5139,16 +5060,13 @@ prefs_changed_callback (MetaPreference pref,
         update_window_grab_modifiers (display);
 
       /* Grab all */
-      tmp = windows;
-      while (tmp != NULL)
+      for (tmp = windows; tmp != NULL; tmp = tmp->next)
         {
           MetaWindow *w = tmp->data;
           if (w->type != META_WINDOW_DOCK)
             {
               meta_display_grab_focus_window_button (display, w);
-              meta_display_grab_window_buttons (display, w->xwindow);
             }
-          tmp = tmp->next;
         }
 
       g_slist_free (windows);

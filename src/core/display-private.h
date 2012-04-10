@@ -388,11 +388,6 @@ void    meta_display_check_threshold_reached (MetaDisplay *display,
                                               int          x,
                                               int          y);
 
-void meta_display_grab_focus_window_button   (MetaDisplay *display,
-                                              MetaWindow  *window);
-void meta_display_ungrab_focus_window_button (MetaDisplay *display,
-                                              MetaWindow  *window);
-
 /* Next function is defined in edge-resistance.c */
 void meta_display_cleanup_edges              (MetaDisplay *display);
 

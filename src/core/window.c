@@ -1272,7 +1272,7 @@ meta_window_new_with_attrs (MetaDisplay       *display,
   if (window->type != META_WINDOW_DOCK && !window->override_redirect)
     {
       meta_window_grab_buttons (window);
-      meta_display_grab_focus_window_button (window->display, window);
+      meta_window_grab_focus_button (window);
     }
 
   if (window->type == META_WINDOW_DESKTOP ||
@@ -1856,7 +1856,7 @@ meta_window_unmanage (MetaWindow  *window,
     }
 
   meta_window_ungrab_keys (window);
-  meta_display_ungrab_focus_window_button (window->display, window);
+  meta_window_ungrab_focus_button (window);
   meta_window_ungrab_buttons (window);
 
   meta_display_unregister_x_window (window->display, window->xwindow);
@@ -6982,7 +6982,7 @@ meta_window_notify_focus (MetaWindow *window,
            */
           if (meta_prefs_get_focus_mode () == G_DESKTOP_FOCUS_MODE_CLICK ||
               !meta_prefs_get_raise_on_click())
-            meta_display_ungrab_focus_window_button (window->display, window);
+            meta_window_ungrab_focus_button (window);
 
           g_signal_emit (window, window_signals[FOCUS], 0);
           g_object_notify (G_OBJECT (window->display), "focus-window");
@@ -7035,7 +7035,7 @@ meta_window_notify_focus (MetaWindow *window,
           /* Re-grab for click to focus and raise-on-click, if necessary */
           if (meta_prefs_get_focus_mode () == G_DESKTOP_FOCUS_MODE_CLICK ||
               !meta_prefs_get_raise_on_click ())
-            meta_display_grab_focus_window_button (window->display, window);
+            meta_window_grab_focus_button (window);
        }
     }
 

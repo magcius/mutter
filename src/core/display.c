@@ -3874,80 +3874,6 @@ meta_change_button_grab (MetaDisplay *display,
   meta_error_trap_pop (display);
 }
 
-/* Grab buttons we only grab while unfocused in click-to-focus mode */
-#define MAX_FOCUS_BUTTON 4
-void
-meta_display_grab_focus_window_button (MetaDisplay *display,
-                                       MetaWindow  *window)
-{
-  /* Grab button 1 for activating unfocused windows */
-  meta_verbose ("Grabbing unfocused window buttons for %s\n", window->desc);
-
-#if 0
-  /* FIXME:115072 */
-  /* Don't grab at all unless in click to focus mode. In click to
-   * focus, we may sometimes be clever about intercepting and eating
-   * the focus click. But in mouse focus, we never do that since the
-   * focus window may not be raised, and who wants to think about
-   * mouse focus anyway.
-   */
-  if (meta_prefs_get_focus_mode () != G_DESKTOP_FOCUS_MODE_CLICK)
-    {
-      meta_verbose (" (well, not grabbing since not in click to focus mode)\n");
-      return;
-    }
-#endif
-  
-  if (window->have_focus_click_grab)
-    {
-      meta_verbose (" (well, not grabbing since we already have the grab)\n");
-      return;
-    }
-  
-  /* FIXME If we ignored errors here instead of spewing, we could
-   * put one big error trap around the loop and avoid a bunch of
-   * XSync()
-   */
-  
-  {
-    int i = 1;
-    while (i < MAX_FOCUS_BUTTON)
-      {
-        meta_change_button_grab (display,
-                                 window->xwindow,
-                                 TRUE, TRUE,
-                                 i, 0);
-        
-        ++i;
-      }
-
-    window->have_focus_click_grab = TRUE;
-  }
-}
-
-void
-meta_display_ungrab_focus_window_button (MetaDisplay *display,
-                                         MetaWindow  *window)
-{
-  meta_verbose ("Ungrabbing unfocused window buttons for %s\n", window->desc);
-
-  if (!window->have_focus_click_grab)
-    return;
-  
-  {
-    int i = 1;
-    while (i < MAX_FOCUS_BUTTON)
-      {
-        meta_change_button_grab (display, window->xwindow,
-                                 FALSE, FALSE, i, 0);
-        
-        ++i;
-      }
-
-    window->have_focus_click_grab = FALSE;
-  }
-}
-
 void
 meta_display_increment_event_serial (MetaDisplay *display)
 {
@@ -5052,7 +4978,7 @@ prefs_changed_callback (MetaPreference pref,
       for (tmp = windows; tmp != NULL; tmp = tmp->next)
         {
           MetaWindow *w = tmp->data;
-          meta_display_ungrab_focus_window_button (display, w);
+          meta_window_grab_focus_button (w);
         }
 
       /* change our modifier */
@@ -5065,7 +4991,7 @@ prefs_changed_callback (MetaPreference pref,
           MetaWindow *w = tmp->data;
           if (w->type != META_WINDOW_DOCK)
             {
-              meta_display_grab_focus_window_button (display, w);
+              meta_window_grab_focus_button (w);
             }
         }
 

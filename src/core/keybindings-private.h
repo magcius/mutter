@@ -88,6 +88,8 @@ gboolean meta_window_grab_all_keys          (MetaWindow  *window,
                                              guint32      timestamp);
 void     meta_window_ungrab_all_keys        (MetaWindow  *window,
                                              guint32      timestamp);
+void     meta_window_grab_focus_button      (MetaWindow  *window);
+void     meta_window_ungrab_focus_button    (MetaWindow  *window);
 gboolean meta_display_process_button_event  (MetaDisplay *display,
                                              MetaWindow  *window,
                                              XEvent      *event,

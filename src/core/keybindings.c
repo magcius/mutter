@@ -919,7 +919,8 @@ meta_grab_button (MetaDisplay *display,
                   Window       xwindow,
                   int          button,
                   int          modmask,
-                  gboolean     grab)
+                  gboolean     grab,
+                  gboolean     sync)
 {
   unsigned int ignored_mask;
 
@@ -948,7 +949,7 @@ meta_grab_button (MetaDisplay *display,
                      xwindow, False,
                      ButtonPressMask | ButtonReleaseMask |
                      PointerMotionMask | PointerMotionHintMask,
-                     GrabModeAsync,
+                     sync ? GrabModeSync : GrabModeAsync,
                      GrabModeAsync,
                      False, None);
       else
@@ -970,6 +971,47 @@ meta_grab_button (MetaDisplay *display,
     }
 
   meta_error_trap_pop (display);
+}
+
+/* Grab buttons we only grab while unfocused in click-to-focus mode */
+#define MAX_FOCUS_BUTTON 4
+void
+meta_window_grab_focus_button (MetaWindow *window)
+{
+  int i;
+  if (window->have_focus_click_grab)
+    return;
+  
+  /* FIXME If we ignored errors here instead of spewing, we could
+   * put one big error trap around the loop and avoid a bunch of
+   * XSync()
+   */
+
+  for (i = 1; i < MAX_FOCUS_BUTTON; i++)
+    meta_grab_button (window->display, window->xwindow, i, 0, TRUE, TRUE);
+
+  window->have_focus_click_grab = TRUE;
+}
+
+void
+meta_window_ungrab_focus_button (MetaWindow *window)
+{
+  int i;
+  /* Grab button 1 for activating unfocused windows */
+  meta_verbose ("Grabbing unfocused window buttons for %s\n", window->desc);
+
+  if (window->have_focus_click_grab)
+    return;
+  
+  /* FIXME If we ignored errors here instead of spewing, we could
+   * put one big error trap around the loop and avoid a bunch of
+   * XSync()
+   */
+
+  for (i = 1; i < MAX_FOCUS_BUTTON; i++)
+    meta_grab_button (window->display, window->xwindow, i, 0, FALSE, TRUE);
+
+  window->have_focus_click_grab = TRUE;
 }
 
 static void
@@ -1054,7 +1096,7 @@ grab_buttons (MetaButtonBinding *bindings,
           meta_grab_button (display, xwindow,
                             bindings[i].button,
                             bindings[i].mask,
-                            grab);
+                            grab, FALSE);
         }
       
       ++i;

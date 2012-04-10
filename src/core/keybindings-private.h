@@ -31,11 +31,19 @@
 
 #include <meta/keybindings.h>
 
-struct _MetaKeyHandler
+/* duck typing */
+typedef void (* MetaBindingHandlerFunc) (MetaDisplay *display,
+                                         MetaScreen  *screen,
+                                         MetaWindow  *window,
+                                         XEvent      *event,
+                                         gpointer     handler,
+                                         gpointer     user_data);
+
+struct _MetaBindingHandler
 {
   char *name;
-  MetaKeyHandlerFunc func;
-  MetaKeyHandlerFunc default_func;
+  MetaBindingHandlerFunc func;
+  MetaBindingHandlerFunc default_func;
   gint data, flags;
   gpointer user_data;
   GDestroyNotify user_data_free_func;
@@ -44,27 +52,46 @@ struct _MetaKeyHandler
 struct _MetaKeyBinding
 {
   const char *name;
+  MetaBindingHandler *handler;
+  MetaVirtualModifier modifiers;
+  unsigned int mask;
+
   KeySym keysym;
   KeyCode keycode;
-  unsigned int mask;
+};
+
+struct _MetaButtonBinding
+{
+  const char *name;
+  MetaBindingHandler *handler;
   MetaVirtualModifier modifiers;
-  MetaKeyHandler *handler;
+  unsigned int mask;
+
+  unsigned int button;
 };
 
 void     meta_display_init_keys             (MetaDisplay *display);
 void     meta_display_shutdown_keys         (MetaDisplay *display);
 void     meta_screen_grab_keys              (MetaScreen  *screen);
 void     meta_screen_ungrab_keys            (MetaScreen  *screen);
+void     meta_screen_grab_buttons           (MetaScreen  *screen);
+void     meta_screen_ungrab_buttons         (MetaScreen  *screen);
 gboolean meta_screen_grab_all_keys          (MetaScreen  *screen,
                                              guint32      timestamp);
 void     meta_screen_ungrab_all_keys        (MetaScreen  *screen, 
                                              guint32      timestamp);
 void     meta_window_grab_keys              (MetaWindow  *window);
 void     meta_window_ungrab_keys            (MetaWindow  *window);
+void     meta_window_grab_buttons           (MetaWindow  *window);
+void     meta_window_ungrab_buttons         (MetaWindow  *window);
 gboolean meta_window_grab_all_keys          (MetaWindow  *window,
                                              guint32      timestamp);
 void     meta_window_ungrab_all_keys        (MetaWindow  *window,
                                              guint32      timestamp);
+gboolean meta_display_process_button_event  (MetaDisplay *display,
+                                             MetaWindow  *window,
+                                             XEvent      *event,
+                                             gboolean     frame_was_receiver);
 gboolean meta_display_process_key_event     (MetaDisplay *display,
                                              MetaWindow  *window,
                                              XEvent      *event);
@@ -77,11 +104,11 @@ gboolean meta_prefs_add_keybinding          (const char           *name,
                                              MetaKeyBindingAction  action,
                                              MetaKeyBindingFlags   flags);
 
-gboolean meta_prefs_remove_keybinding       (const char    *name);
+gboolean meta_prefs_add_buttonbinding       (const char           *name,
+                                             const char           *schema,
+                                             MetaKeyBindingFlags   flags);
 
+gboolean meta_prefs_remove_keybinding       (const char    *name);
+gboolean meta_prefs_remove_buttonbinding    (const char    *name);
 
 #endif
-
-
-
-

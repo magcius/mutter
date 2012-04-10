@@ -37,6 +37,8 @@ typedef struct _MetaWorkspace   MetaWorkspace;
  *
  */
 typedef struct _MetaGroup       MetaGroup;
+typedef struct _MetaBinding     MetaBinding;
 typedef struct _MetaKeyBinding  MetaKeyBinding;
+typedef struct _MetaButtonBinding MetaButtonBinding;
 
 #endif

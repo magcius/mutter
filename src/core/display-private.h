@@ -227,6 +227,8 @@ struct _MetaDisplay
   /* Keybindings stuff */
   MetaKeyBinding *key_bindings;
   int             n_key_bindings;
+  MetaButtonBinding *button_bindings;
+  int                n_button_bindings;
   int             min_keycode;
   int             max_keycode;
   KeySym *keymap;

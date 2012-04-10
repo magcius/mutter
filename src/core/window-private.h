@@ -295,6 +295,7 @@ struct _MetaWindow
   guint keys_grabbed : 1;     /* normal keybindings grabbed */
   guint grab_on_frame : 1;    /* grabs are on the frame */
   guint all_keys_grabbed : 1; /* AnyKey grabbed */
+  guint buttons_grabbed : 1;
   
   /* Set if the reason for unmanaging the window is that
    * it was withdrawn

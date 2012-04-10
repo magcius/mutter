@@ -112,10 +112,10 @@ static gboolean no_tab_popup = FALSE;
 
 static void handle_preference_update_enum (GSettings *settings,
                                            gchar     *key);
-static gboolean update_binding         (MetaKeyPref *binding,
+static gboolean update_key_binding     (MetaKeyPref *pref,
                                         gchar      **strokes);
-static gboolean update_key_binding     (const char  *key,
-                                        gchar      **strokes);
+static gboolean update_button_binding  (MetaButtonPref *pref,
+                                        gchar         **strokes);
 static gboolean update_workspace_names (void);
 
 static void settings_changed (GSettings      *settings,
@@ -1051,20 +1051,6 @@ settings_changed (GSettings *settings,
   g_variant_unref (value);
 }
 
-static void
-bindings_changed (GSettings *settings,
-                  gchar *key,
-                  gpointer data)
-{
-  gchar **strokes;
-  strokes = g_settings_get_strv (settings, key);
-
-  if (update_key_binding (key, strokes))
-    queue_changed (META_PREF_KEYBINDINGS);
-
-  g_strfreev (strokes);
-}
-
 /**
  * maybe_give_disable_workaround_warning:
  *
@@ -1657,13 +1643,25 @@ meta_prefs_set_num_workspaces (int n_workspaces)
 }
 
 static GHashTable *key_bindings;
+static GHashTable *button_bindings;
 
 static MetaKeyCombo overlay_key_combo = { 0, 0, 0 };
 
 static void
 meta_key_pref_free (MetaKeyPref *pref)
 {
-  update_binding (pref, NULL);
+  update_key_binding (pref, NULL);
+
+  g_free (pref->name);
+  g_free (pref->schema);
+
+  g_free (pref);
+}
+
+static void
+meta_button_pref_free (MetaButtonPref *pref)
+{
+  update_button_binding (pref, NULL);
 
   g_free (pref->name);
   g_free (pref->schema);
@@ -1701,7 +1699,9 @@ init_bindings (void)
 {
   key_bindings = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
                                         (GDestroyNotify)meta_key_pref_free);
-  init_special_bindings ();  
+  button_bindings = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
+                                           (GDestroyNotify)meta_button_pref_free);
+  init_special_bindings ();
 }
 
 static void
@@ -1711,8 +1711,75 @@ init_workspace_names (void)
 }
 
 static gboolean
-update_binding (MetaKeyPref *binding,
-                gchar      **strokes)
+parse_button_accelerator (const char          *accelerator,
+                          unsigned int        *button,
+                          MetaVirtualModifier *mods)
+{
+  const char *s;
+  unsigned int keysym, keycode;
+  if (!meta_ui_parse_accelerator (accelerator, &keysym, &keycode, mods))
+    return FALSE;
+
+  s = strrchr (accelerator, '>');
+  if (s != NULL)
+    {
+      /* skip past '>' */
+      s++;
+    }
+  else
+    {
+      /* no mods, probably */
+      s = accelerator;
+    }
+
+  return sscanf (s, "%u", button) == 1;
+}
+
+static gboolean
+update_button_binding (MetaButtonPref *binding,
+                       gchar         **strokes)
+{
+  unsigned int button;
+  MetaVirtualModifier mods;
+  gboolean changed = FALSE;
+  MetaButtonCombo *combo;
+  int i;
+
+  /* Okay, so, we're about to provide a new list of key combos for this
+   * action. Delete any pre-existing list.
+   */
+  g_slist_free_full (binding->bindings, g_free);
+  binding->bindings = NULL;
+
+  for (i = 0; strokes && strokes[i]; i++)
+    {
+      button = 0;
+      mods = 0;
+
+      if (!parse_button_accelerator (strokes[i], &button, &mods))
+        {
+          meta_warning (_("\"%s\" found in configuration database is not a valid value for button binding \"%s\"\n"),
+                        strokes[i], binding->name);
+
+          /* Value is kept and will thus be removed next time we save the key.
+           * Changing the key in response to a modification could lead to cyclic calls. */
+          continue;
+        }
+
+      changed = TRUE;
+
+      combo = g_malloc0 (sizeof (MetaButtonCombo));
+      combo->button = button;
+      combo->modifiers = mods;
+      binding->bindings = g_slist_prepend (binding->bindings, combo);
+    }
+
+  return changed;
+}
+
+static gboolean
+update_key_binding (MetaKeyPref *binding,
+                    gchar      **strokes)
 {
   unsigned int keysym;
   unsigned int keycode;
@@ -1728,8 +1795,7 @@ update_binding (MetaKeyPref *binding,
   /* Okay, so, we're about to provide a new list of key combos for this
    * action. Delete any pre-existing list.
    */
-  g_slist_foreach (binding->bindings, (GFunc) g_free, NULL);
-  g_slist_free (binding->bindings);
+  g_slist_free_full (binding->bindings, g_free);
   binding->bindings = NULL;
   
   for (i = 0; strokes && strokes[i]; i++)
@@ -1781,18 +1847,6 @@ update_binding (MetaKeyPref *binding,
     }
 
   return changed;
-}
-
-static gboolean
-update_key_binding (const char *key,
-                    gchar     **strokes)
-{
-  MetaKeyPref *pref = g_hash_table_lookup (key_bindings, key);
-
-  if (pref)
-    return update_binding (pref, strokes);
-  else
-    return FALSE;
 }
 
 static gboolean
@@ -1924,6 +1978,53 @@ meta_prefs_get_visual_bell_type (void)
   return visual_bell_type;
 }
 
+static void
+bindings_changed (GSettings *settings,
+                  gchar     *key,
+                  gpointer data)
+{
+  MetaKeyPref *pref = g_hash_table_lookup (key_bindings, key);
+  gchar **strokes = strokes = g_settings_get_strv (settings, key);
+
+  if (pref && update_key_binding (pref, strokes))
+    queue_changed (META_PREF_KEYBINDINGS);
+
+  g_strfreev (strokes);
+}
+
+static GSettings *
+lookup_and_connect_settings (const char *schema,
+                             const char *name,
+                             gboolean builtin)
+{
+  GSettings *settings;
+
+  settings = SETTINGS (schema);
+  if (settings == NULL)
+    {
+      settings = g_settings_new (schema);
+      if (builtin)
+        g_signal_connect (settings, "changed",
+                          G_CALLBACK (bindings_changed), NULL);
+      g_hash_table_insert (settings_schemas, g_strdup (schema), settings);
+    }
+
+  if (!builtin)
+    {
+      guint id;
+      char *changed_signal = g_strdup_printf ("changed::%s", name);
+      id = g_signal_connect (settings, changed_signal,
+                             G_CALLBACK (bindings_changed), NULL);
+      g_free (changed_signal);
+
+      g_object_set_data (G_OBJECT (settings), name, GUINT_TO_POINTER (id));
+
+      queue_changed (META_PREF_KEYBINDINGS);
+    }
+
+  return settings;
+}
+
 gboolean
 meta_prefs_add_keybinding (const char           *name,
                            const char           *schema,
@@ -1940,16 +2041,6 @@ meta_prefs_add_keybinding (const char           *name,
       return FALSE;
     }
 
-  settings = SETTINGS (schema);
-  if (settings == NULL)
-    {
-      settings = g_settings_new (schema);
-      if ((flags & META_KEY_BINDING_BUILTIN) != 0)
-        g_signal_connect (settings, "changed",
-                          G_CALLBACK (bindings_changed), NULL);
-      g_hash_table_insert (settings_schemas, g_strdup (schema), settings);
-    }
-
   pref = g_new0 (MetaKeyPref, 1);
   pref->name = g_strdup (name);
   pref->schema = g_strdup (schema);
@@ -1959,36 +2050,59 @@ meta_prefs_add_keybinding (const char           *name,
   pref->per_window = (flags & META_KEY_BINDING_PER_WINDOW) != 0;
   pref->builtin = (flags & META_KEY_BINDING_BUILTIN) != 0;
 
+  settings = lookup_and_connect_settings (schema, name, pref->builtin);
+
   strokes = g_settings_get_strv (settings, name);
-  update_binding (pref, strokes);
+  update_key_binding (pref, strokes);
   g_strfreev (strokes);
 
   g_hash_table_insert (key_bindings, g_strdup (name), pref);
-
-  if (!pref->builtin)
-    {
-      guint id;
-      char *changed_signal = g_strdup_printf ("changed::%s", name);
-      id = g_signal_connect (settings, changed_signal,
-                             G_CALLBACK (bindings_changed), NULL);
-      g_free (changed_signal);
-
-      g_object_set_data (G_OBJECT (settings), name, GUINT_TO_POINTER (id));
-
-      queue_changed (META_PREF_KEYBINDINGS);
-    }
 
   return TRUE;
 }
 
 gboolean
-meta_prefs_remove_keybinding (const char *name)
+meta_prefs_add_buttonbinding (const char           *name,
+                              const char           *schema,
+                              MetaKeyBindingFlags   flags)
+{
+  MetaButtonPref *pref;
+  GSettings      *settings;
+  char          **strokes;
+
+  if (g_hash_table_lookup (button_bindings, name))
+    {
+      meta_warning ("Trying to re-add buttonbinding \"%s\".\n", name);
+      return FALSE;
+    }
+
+  pref = g_new0 (MetaButtonPref, 1);
+  pref->name = g_strdup (name);
+  pref->schema = g_strdup (schema);
+  pref->bindings = NULL;
+  pref->per_window = (flags & META_KEY_BINDING_PER_WINDOW) != 0;
+  pref->builtin = (flags & META_KEY_BINDING_BUILTIN) != 0;
+
+  settings = lookup_and_connect_settings (schema, name, pref->builtin);
+
+  strokes = g_settings_get_strv (settings, name);
+  update_button_binding (pref, strokes);
+  g_strfreev (strokes);
+
+  g_hash_table_insert (button_bindings, g_strdup (name), pref);
+
+  return TRUE;
+}
+
+static gboolean
+meta_prefs_remove_binding (GHashTable *bindings_table,
+                           const char *name)
 {
   MetaKeyPref *pref;
   GSettings   *settings;
   guint        id;
 
-  pref = g_hash_table_lookup (key_bindings, name);
+  pref = g_hash_table_lookup (bindings_table, name);
   if (!pref)
     {
       meta_warning ("Trying to remove non-existent keybinding \"%s\".\n", name);
@@ -2005,11 +2119,23 @@ meta_prefs_remove_keybinding (const char *name)
   id = GPOINTER_TO_UINT (g_object_steal_data (G_OBJECT (settings), name));
   g_signal_handler_disconnect (settings, id);
 
-  g_hash_table_remove (key_bindings, name);
+  g_hash_table_remove (bindings_table, name);
 
   queue_changed (META_PREF_KEYBINDINGS);
 
   return TRUE;
+}
+
+gboolean
+meta_prefs_remove_keybinding (const char *name)
+{
+  return meta_prefs_remove_binding (key_bindings, name);
+}
+
+gboolean
+meta_prefs_remove_buttonbinding (const char *name)
+{
+  return meta_prefs_remove_binding (button_bindings, name);
 }
 
 /**
@@ -2021,6 +2147,17 @@ GList *
 meta_prefs_get_keybindings ()
 {
   return g_hash_table_get_values (key_bindings);
+}
+
+/**
+ * meta_prefs_get_buttonbindings:
+ *
+ * Returns: (element-type MetaButtonPref) (transfer container):
+ */
+GList *
+meta_prefs_get_buttonbindings ()
+{
+  return g_hash_table_get_values (button_bindings);
 }
 
 void 

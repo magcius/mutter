@@ -245,7 +245,8 @@ typedef enum
   META_KEY_BINDING_PER_WINDOW  = 1 << 0,
   META_KEY_BINDING_BUILTIN     = 1 << 1,
   META_KEY_BINDING_REVERSES    = 1 << 2,
-  META_KEY_BINDING_IS_REVERSED = 1 << 3
+  META_KEY_BINDING_IS_REVERSED = 1 << 3,
+  META_KEY_BINDING_FRAME_ONLY  = 1 << 4,
 } MetaKeyBindingFlags;
 
 typedef struct
@@ -254,6 +255,12 @@ typedef struct
   unsigned int keycode;
   MetaVirtualModifier modifiers;
 } MetaKeyCombo;
+
+typedef struct
+{
+  unsigned int button;
+  MetaVirtualModifier modifiers;
+} MetaButtonCombo;
 
 /**
  * MetaKeyHandlerFunc:
@@ -267,7 +274,19 @@ typedef void (* MetaKeyHandlerFunc) (MetaDisplay    *display,
                                      MetaKeyBinding *binding,
                                      gpointer        user_data);
 
-typedef struct _MetaKeyHandler MetaKeyHandler;
+/**
+ * MetaButtonHandlerFunc:
+ * @event: (type gpointer):
+ *
+ */
+typedef void (* MetaButtonHandlerFunc) (MetaDisplay       *display,
+                                        MetaScreen        *screen,
+                                        MetaWindow        *window,
+                                        XEvent            *event,
+                                        MetaButtonBinding *binding,
+                                        gpointer           user_data);
+
+typedef struct _MetaBindingHandler MetaBindingHandler;
 
 typedef struct
 {
@@ -276,11 +295,7 @@ typedef struct
 
   MetaKeyBindingAction action;
 
-  /*
-   * A list of MetaKeyCombos. Each of them is bound to
-   * this keypref. If one has keysym==modifiers==0, it is
-   * ignored.
-   */
+  /** a list of MetaKeyCombos. */
   GSList *bindings;
 
   /** for keybindings that can have shift or not like Alt+Tab */
@@ -293,9 +308,25 @@ typedef struct
   gboolean      builtin:1;
 } MetaKeyPref;
 
+typedef struct
+{
+  char *name;
+  char *schema;
+
+  /** a list of MetaButtonCombos. */
+  GSList *bindings;
+
+  /** for keybindings that apply only to a window */
+  gboolean      per_window:1;
+
+  /** for keybindings not added with meta_display_add_keybinding() */
+  gboolean      builtin:1;
+} MetaButtonPref;
+
 GType meta_key_binding_get_type    (void);
 
 GList *meta_prefs_get_keybindings (void);
+GList *meta_prefs_get_buttonbindings (void);
 
 MetaKeyBindingAction meta_prefs_get_keybinding_action (const char *name);
 

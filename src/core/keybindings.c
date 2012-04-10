@@ -94,6 +94,18 @@ meta_key_binding_get_mask (MetaKeyBinding *binding)
   return binding->mask;
 }
 
+const char *
+meta_button_binding_get_name (MetaButtonBinding *binding)
+{
+  return binding->name;
+}
+
+unsigned int
+meta_button_binding_get_button (MetaButtonBinding *binding)
+{
+  return binding->button;
+}
+
 /* These can't be bound to anything, but they are used to handle
  * various other events.  TODO: Possibly we should include them as event
  * handler functions and have some kind of flag to say they're unbindable.
@@ -134,15 +146,12 @@ static gboolean process_workspace_switch_grab (MetaDisplay *display,
                                                XEvent      *event,
                                                KeySym       keysym);
 
-static void regrab_key_bindings         (MetaDisplay *display);
-
 
 static GHashTable *key_handlers;
-
-#define HANDLER(name) g_hash_table_lookup (key_handlers, (name))
+static GHashTable *button_handlers;
 
 static void
-key_handler_free (MetaKeyHandler *handler)
+binding_handler_free (MetaBindingHandler *handler)
 {
   g_free (handler->name);
   if (handler->user_data_free_func && handler->user_data)
@@ -320,97 +329,72 @@ reload_modifiers (MetaDisplay *display)
   if (display->key_bindings)
     {
       int i;
-      
-      i = 0;
-      while (i < display->n_key_bindings)
+
+      for (i = 0; i < display->n_key_bindings; i++)
         {
           meta_display_devirtualize_modifiers (display,
                                                display->key_bindings[i].modifiers,
                                                &display->key_bindings[i].mask);
-
-          meta_topic (META_DEBUG_KEYBINDINGS,
-                      " Devirtualized mods 0x%x -> 0x%x (%s)\n",
-                      display->key_bindings[i].modifiers,
-                      display->key_bindings[i].mask,
-                      display->key_bindings[i].name);          
-          
-          ++i;
         }
-    }
-}
 
-
-static int
-count_bindings (GList *prefs)
-{
-  GList *p;
-  int count;
-
-  count = 0;
-  p = prefs;
-  while (p)
-    {
-      MetaKeyPref *pref = (MetaKeyPref*)p->data;
-      GSList *tmp = pref->bindings;
-
-      while (tmp)
+      for (i = 0; i < display->n_button_bindings; i++)
         {
-          MetaKeyCombo *combo = tmp->data;
-
-          if (combo && (combo->keysym != None || combo->keycode != 0))
-            {
-              count += 1;
-
-              if (pref->add_shift &&
-                  (combo->modifiers & META_VIRTUAL_SHIFT_MASK) == 0)
-                count += 1;
-            }
-
-          tmp = tmp->next;
+          meta_display_devirtualize_modifiers (display,
+                                               display->button_bindings[i].modifiers,
+                                               &display->button_bindings[i].mask);
         }
-
-      p = p->next;
     }
-
-  return count;
 }
 
 static void
-rebuild_binding_table (MetaDisplay     *display,
-                       MetaKeyBinding **bindings_p,
-                       int             *n_bindings_p,
-                       GList           *prefs)
+rebuild_key_binding_table (MetaDisplay *display)
 {
-  GList *p;
-  int n_bindings;
-  int i;
-  
-  n_bindings = count_bindings (prefs);
-  g_free (*bindings_p);
-  *bindings_p = g_new0 (MetaKeyBinding, n_bindings);
+  GList *p, *prefs;
+  MetaKeyBinding *bindings;
+  int i, n_bindings = 0;
 
-  i = 0;
-  p = prefs;
-  while (p)
+  prefs = meta_prefs_get_keybindings ();
+  for (p = prefs; p != NULL; p = p->next)
     {
       MetaKeyPref *pref = (MetaKeyPref*)p->data;
-      GSList *tmp = pref->bindings;
+      GSList *tmp;
+      for (tmp = pref->bindings; tmp != NULL; tmp = tmp->next)
+        {
+          MetaKeyCombo *combo = tmp->data;
+          if (combo && (combo->keysym != None || combo->keycode != 0))
+            {
+              n_bindings++;
+              if (pref->add_shift &&
+                  (combo->modifiers & META_VIRTUAL_SHIFT_MASK) == 0)
+              n_bindings++;
+            }
+        }
+    }
 
-      while (tmp)
+  g_free (display->key_bindings);
+  bindings = g_new0 (MetaKeyBinding, n_bindings);
+
+  i = 0;
+  for (p = prefs; p != NULL; p = p->next)
+    {
+      MetaKeyPref *pref = (MetaKeyPref*)p->data;
+      GSList *tmp;
+
+      for (tmp = pref->bindings; tmp != NULL; tmp = tmp->next)
         {
           MetaKeyCombo *combo = tmp->data;
 
           if (combo && (combo->keysym != None || combo->keycode != 0))
             {
-              MetaKeyHandler *handler = HANDLER (pref->name);
+              MetaBindingHandler *handler = g_hash_table_lookup (key_handlers, pref->name);
 
-              (*bindings_p)[i].name = pref->name;
-              (*bindings_p)[i].handler = handler;
-              (*bindings_p)[i].keysym = combo->keysym;
-              (*bindings_p)[i].keycode = combo->keycode;
-              (*bindings_p)[i].modifiers = combo->modifiers;
-              (*bindings_p)[i].mask = 0;
-          
+              bindings[i].name = pref->name;
+              bindings[i].handler = handler;
+              bindings[i].keysym = combo->keysym;
+              bindings[i].keycode = combo->keycode;
+              bindings[i].modifiers = combo->modifiers;
+              bindings[i].mask = 0;
+
               ++i;
 
               if (pref->add_shift &&
@@ -420,47 +404,79 @@ rebuild_binding_table (MetaDisplay     *display,
                               "Binding %s also needs Shift grabbed\n",
                                pref->name);
               
-                  (*bindings_p)[i].name = pref->name;
-                  (*bindings_p)[i].handler = handler;
-                  (*bindings_p)[i].keysym = combo->keysym;
-                  (*bindings_p)[i].keycode = combo->keycode;
-                  (*bindings_p)[i].modifiers = combo->modifiers |
+                  bindings[i].name = pref->name;
+                  bindings[i].handler = handler;
+                  bindings[i].keysym = combo->keysym;
+                  bindings[i].keycode = combo->keycode;
+                  bindings[i].modifiers = combo->modifiers |
                     META_VIRTUAL_SHIFT_MASK;
-                  (*bindings_p)[i].mask = 0;
+                  bindings[i].mask = 0;
               
                   ++i;
                 }
             }
-            
-          tmp = tmp->next;
         }
-      
-      p = p->next;
     }
 
   g_assert (i == n_bindings);
-  
-  *n_bindings_p = i;
 
-  meta_topic (META_DEBUG_KEYBINDINGS,
-              " %d bindings in table\n",
-              *n_bindings_p);
+  display->key_bindings = bindings;
+  display->n_key_bindings = n_bindings;
 }
 
 static void
-rebuild_key_binding_table (MetaDisplay *display)
+rebuild_button_binding_table (MetaDisplay *display)
 {
-  GList *prefs;
+  GList *p, *prefs;
+  MetaButtonBinding *bindings;
+  int i, n_bindings = 0;
 
-  meta_topic (META_DEBUG_KEYBINDINGS,
-              "Rebuilding key binding table from preferences\n");
+  prefs = meta_prefs_get_buttonbindings ();
+  for (p = prefs; p != NULL; p = p->next)
+    {
+      MetaButtonPref *pref = (MetaButtonPref*)p->data;
+      GSList *tmp;
 
-  prefs = meta_prefs_get_keybindings ();
-  rebuild_binding_table (display,
-                         &display->key_bindings,
-                         &display->n_key_bindings,
-                         prefs);
-  g_list_free (prefs);
+      for (tmp = pref->bindings; tmp != NULL; tmp = tmp->next)
+        {
+          MetaButtonCombo *combo = tmp->data;
+
+          if (combo && combo->button != 0)
+            n_bindings++;
+        }
+    }
+
+  g_free (display->button_bindings);
+  bindings = g_new0 (MetaButtonBinding, n_bindings);
+
+  i = 0;
+  for (p = prefs; p != NULL; p = p->next)
+    {
+      MetaButtonPref *pref = (MetaButtonPref*)p->data;
+      GSList *tmp;
+
+      for (tmp = pref->bindings; tmp != NULL; tmp = tmp->next)
+        {
+          MetaButtonCombo *combo = tmp->data;
+
+          if (combo && combo->button != 0)
+            {
+              MetaBindingHandler *handler = g_hash_table_lookup (button_handlers, pref->name);
+
+              bindings[i].name = pref->name;
+              bindings[i].handler = handler;
+              bindings[i].modifiers = combo->modifiers;
+              bindings[i].button = combo->button;
+              bindings[i].mask = 0;
+              ++i;
+            }
+        }
+    }
+
+  g_assert (i == n_bindings);
+
+  display->button_bindings = bindings;
+  display->n_button_bindings = n_bindings;
 }
 
 static void
@@ -477,7 +493,7 @@ rebuild_special_bindings (MetaDisplay *display)
 }
 
 static void
-regrab_key_bindings (MetaDisplay *display)
+regrab_bindings (MetaDisplay *display)
 {
   GSList *tmp;
   GSList *windows;
@@ -491,6 +507,8 @@ regrab_key_bindings (MetaDisplay *display)
 
       meta_screen_ungrab_keys (screen);
       meta_screen_grab_keys (screen);
+      meta_screen_ungrab_buttons (screen);
+      meta_screen_grab_buttons (screen);
 
       tmp = tmp->next;
     }
@@ -500,10 +518,12 @@ regrab_key_bindings (MetaDisplay *display)
   while (tmp != NULL)
     {
       MetaWindow *w = tmp->data;
-      
+
       meta_window_ungrab_keys (w);
       meta_window_grab_keys (w);
-      
+      meta_window_ungrab_buttons (w);
+      meta_window_grab_buttons (w);
+
       tmp = tmp->next;
     }
   meta_error_trap_pop (display);
@@ -535,23 +555,18 @@ display_get_keybinding (MetaDisplay  *display,
   return NULL;
 }
 
-static gboolean
-add_keybinding_internal (MetaDisplay          *display,
-                         const char           *name,
-                         const char           *schema,
-                         MetaKeyBindingFlags   flags,
-                         MetaKeyBindingAction  action,
-                         MetaKeyHandlerFunc    func,
-                         int                   data,
-                         gpointer              user_data,
-                         GDestroyNotify        free_data)
+static MetaBindingHandler*
+binding_handler_new (const char            *name,
+                     const char            *schema,
+                     MetaKeyBindingFlags    flags,
+                     MetaBindingHandlerFunc func,
+                     int                    data,
+                     gpointer               user_data,
+                     GDestroyNotify         free_data)
 {
-  MetaKeyHandler *handler;
+  MetaBindingHandler *handler;
 
-  if (!meta_prefs_add_keybinding (name, schema, action, flags))
-    return FALSE;
-
-  handler = g_new0 (MetaKeyHandler, 1);
+  handler = g_new0 (MetaBindingHandler, 1);
   handler->name = g_strdup (name);
   handler->func = func;
   handler->default_func = func;
@@ -560,7 +575,46 @@ add_keybinding_internal (MetaDisplay          *display,
   handler->user_data = user_data;
   handler->user_data_free_func = free_data;
 
-  g_hash_table_insert (key_handlers, g_strdup (name), handler);
+  return handler;
+}
+
+static gboolean
+add_keybinding_internal (const char           *name,
+                         const char           *schema,
+                         MetaKeyBindingFlags   flags,
+                         MetaKeyBindingAction  action,
+                         MetaKeyHandlerFunc    func,
+                         int                   data,
+                         gpointer              user_data,
+                         GDestroyNotify        free_data)
+{
+  if (!meta_prefs_add_keybinding (name, schema, action, flags))
+    return FALSE;
+
+  g_hash_table_insert (key_handlers, g_strdup (name),
+                       binding_handler_new (name, schema, flags,
+                                            (MetaBindingHandlerFunc) func,
+                                            data, user_data, free_data));
+
+  return TRUE;
+}
+
+static gboolean
+add_buttonbinding_internal (const char           *name,
+                            const char           *schema,
+                            MetaKeyBindingFlags   flags,
+                            MetaButtonHandlerFunc func,
+                            int                   data,
+                            gpointer              user_data,
+                            GDestroyNotify        free_data)
+{
+  if (!meta_prefs_add_buttonbinding (name, schema, flags))
+    return FALSE;
+
+  g_hash_table_insert (button_handlers, g_strdup (name),
+                       binding_handler_new (name, schema, flags,
+                                            (MetaBindingHandlerFunc) func,
+                                            data, user_data, free_data));
 
   return TRUE;
 }
@@ -574,9 +628,20 @@ add_builtin_keybinding (MetaDisplay          *display,
                         MetaKeyHandlerFunc    handler,
                         int                   handler_arg)
 {
-  return add_keybinding_internal (display, name, schema,
-                                  flags | META_KEY_BINDING_BUILTIN,
+  return add_keybinding_internal (name, schema, flags | META_KEY_BINDING_BUILTIN,
                                   action, handler, handler_arg, NULL, NULL);
+}
+
+static gboolean
+add_builtin_buttonbinding (MetaDisplay          *display,
+                           const char           *name,
+                           const char           *schema,
+                           MetaKeyBindingFlags   flags,
+                           MetaButtonHandlerFunc handler,
+                           int                   handler_arg)
+{
+  return add_buttonbinding_internal (name, schema, flags | META_KEY_BINDING_BUILTIN,
+                                     handler, handler_arg, NULL, NULL);
 }
 
 /**
@@ -615,7 +680,7 @@ meta_display_add_keybinding (MetaDisplay         *display,
                              gpointer             user_data,
                              GDestroyNotify       free_data)
 {
-  return add_keybinding_internal (display, name, schema, flags,
+  return add_keybinding_internal (name, schema, flags,
                                   META_KEYBINDING_ACTION_NONE,
                                   handler, 0, user_data, free_data);
 }
@@ -727,8 +792,7 @@ meta_display_process_mapping_event (MetaDisplay *display,
         reload_keycodes (display);
 
       reload_modifiers (display);
-
-      regrab_key_bindings (display);
+      regrab_bindings (display);
     }
 }
 
@@ -744,10 +808,11 @@ bindings_changed_callback (MetaPreference pref,
     {
     case META_PREF_KEYBINDINGS:
       rebuild_key_binding_table (display);
+      rebuild_button_binding_table (display);
       rebuild_special_bindings (display);
       reload_keycodes (display);
       reload_modifiers (display);
-      regrab_key_bindings (display);
+      regrab_bindings (display);
       break;
     default:
       break;
@@ -784,12 +849,11 @@ keysym_name (int keysym)
 
 /* Grab/ungrab, ignoring all annoying modifiers like NumLock etc. */
 static void
-meta_change_keygrab (MetaDisplay *display,
-                     Window       xwindow,
-                     gboolean     grab,
-                     int          keysym,
-                     unsigned int keycode,
-                     int          modmask)
+meta_grab_key (MetaDisplay *display,
+               Window       xwindow,
+               int          keysym,
+               unsigned int keycode,
+               int          modmask)
 {
   unsigned int ignored_mask;
 
@@ -799,8 +863,7 @@ meta_change_keygrab (MetaDisplay *display,
    */
 
   meta_topic (META_DEBUG_KEYBINDINGS,
-              "%s keybinding %s keycode %d mask 0x%x on 0x%lx\n",
-              grab ? "Grabbing" : "Ungrabbing",
+              "Grabbing keybinding %s keycode %d mask 0x%x on 0x%lx\n",
               keysym_name (keysym), keycode,
               modmask, xwindow);
 
@@ -821,16 +884,12 @@ meta_change_keygrab (MetaDisplay *display,
 
       if (meta_is_debugging ())
         meta_error_trap_push_with_return (display);
-      if (grab)
-        XGrabKey (display->xdisplay, keycode,
-                  modmask | ignored_mask,
-                  xwindow,
-                  True,
-                  GrabModeAsync, GrabModeSync);
-      else
-        XUngrabKey (display->xdisplay, keycode,
-                    modmask | ignored_mask,
-                    xwindow);
+
+      XGrabKey (display->xdisplay, keycode,
+                modmask | ignored_mask,
+                xwindow,
+                True,
+                GrabModeAsync, GrabModeSync);
 
       if (meta_is_debugging ())
         {
@@ -838,8 +897,8 @@ meta_change_keygrab (MetaDisplay *display,
           
           result = meta_error_trap_pop_with_return (display);
           
-          if (grab && result != Success)
-            {      
+          if (result != Success)
+            {
               if (result == BadAccess)
                 meta_warning (_("Some other program is already using the key %s with modifiers %x as a binding\n"), keysym_name (keysym), modmask | ignored_mask);
               else
@@ -856,13 +915,61 @@ meta_change_keygrab (MetaDisplay *display,
 }
 
 static void
-meta_grab_key (MetaDisplay *display,
-               Window       xwindow,
-               int          keysym,
-               unsigned int keycode,
-               int          modmask)
+meta_grab_button (MetaDisplay *display,
+                  Window       xwindow,
+                  int          button,
+                  int          modmask,
+                  gboolean     grab)
 {
-  meta_change_keygrab (display, xwindow, TRUE, keysym, keycode, modmask);
+  unsigned int ignored_mask;
+
+  meta_verbose ("Grabbing 0x%lx button = %d modmask 0x%x\n",
+                xwindow, button, modmask);
+
+  meta_error_trap_push (display);
+  
+  ignored_mask = 0;
+  while (ignored_mask <= display->ignored_modifier_mask)
+    {
+      if (ignored_mask & ~(display->ignored_modifier_mask))
+        {
+          /* Not a combination of ignored modifiers
+           * (it contains some non-ignored modifiers)
+           */
+          ++ignored_mask;
+          continue;
+        }
+
+      if (meta_is_debugging ())
+        meta_error_trap_push_with_return (display);
+
+      if (grab)
+        XGrabButton (display->xdisplay, button, modmask | ignored_mask,
+                     xwindow, False,
+                     ButtonPressMask | ButtonReleaseMask |
+                     PointerMotionMask | PointerMotionHintMask,
+                     GrabModeAsync,
+                     GrabModeAsync,
+                     False, None);
+      else
+        XUngrabButton (display->xdisplay, button, modmask | ignored_mask,
+                       xwindow);
+
+      if (meta_is_debugging ())
+        {
+          int result;
+
+          result = meta_error_trap_pop_with_return (display);
+
+          if (result != Success)
+            meta_verbose ("Failed to grab button %d with mask 0x%x for window 0x%lx error code %d\n",
+                          button, modmask | ignored_mask, xwindow, result);
+        }
+
+      ++ignored_mask;
+    }
+
+  meta_error_trap_pop (display);
 }
 
 static void
@@ -923,6 +1030,39 @@ ungrab_all_keys (MetaDisplay *display,
     meta_error_trap_pop (display);
 }
 
+static void
+grab_buttons (MetaButtonBinding *bindings,
+              int                n_bindings,
+              MetaDisplay       *display,
+              Window             xwindow,
+              gboolean           grab,
+              gboolean           binding_per_window)
+{
+  int i;
+
+  g_assert (n_bindings == 0 || bindings != NULL);
+
+  meta_error_trap_push (display);
+  
+  i = 0;
+  while (i < n_bindings)
+    {
+      if (!!binding_per_window ==
+          !!(bindings[i].handler->flags & META_KEY_BINDING_PER_WINDOW) &&
+          bindings[i].button != 0)
+        {
+          meta_grab_button (display, xwindow,
+                            bindings[i].button,
+                            bindings[i].mask,
+                            grab);
+        }
+      
+      ++i;
+    }
+
+  meta_error_trap_pop (display);
+}
+
 void
 meta_screen_grab_keys (MetaScreen *screen)
 {
@@ -958,6 +1098,35 @@ meta_screen_ungrab_keys (MetaScreen  *screen)
 }
 
 void
+meta_screen_grab_buttons (MetaScreen *screen)
+{
+
+  if (screen->buttons_grabbed)
+    return;
+
+  grab_buttons (screen->display->button_bindings,
+                screen->display->n_button_bindings,
+                screen->display, screen->xroot,
+                FALSE, TRUE);
+
+  screen->buttons_grabbed = TRUE;
+}
+
+void
+meta_screen_ungrab_buttons (MetaScreen  *screen)
+{
+  if (!screen->buttons_grabbed)
+    return;
+
+  grab_buttons (screen->display->button_bindings,
+                screen->display->n_button_bindings,
+                screen->display, screen->xroot,
+                FALSE, FALSE);
+
+  screen->buttons_grabbed = FALSE;
+}
+
+void
 meta_window_grab_keys (MetaWindow  *window)
 {
   if (window->all_keys_grabbed)
@@ -967,8 +1136,10 @@ meta_window_grab_keys (MetaWindow  *window)
       || window->override_redirect)
     {
       if (window->keys_grabbed)
-        ungrab_all_keys (window->display, window->xwindow);
-      window->keys_grabbed = FALSE;
+        {
+          ungrab_all_keys (window->display, window->xwindow);
+          window->keys_grabbed = FALSE;
+        }
       return;
     }
   
@@ -982,7 +1153,7 @@ meta_window_grab_keys (MetaWindow  *window)
       else
         return; /* already all good */
     }
-  
+
   grab_keys (window->display->key_bindings,
              window->display->n_key_bindings,
              window->display,
@@ -1000,14 +1171,43 @@ meta_window_ungrab_keys (MetaWindow  *window)
     {
       if (window->grab_on_frame &&
           window->frame != NULL)
-        ungrab_all_keys (window->display,
-                         window->frame->xwindow);
+        ungrab_all_keys (window->display, window->frame->xwindow);
       else if (!window->grab_on_frame)
-        ungrab_all_keys (window->display,
-                         window->xwindow);
+        ungrab_all_keys (window->display, window->xwindow);
 
       window->keys_grabbed = FALSE;
     }
+}
+
+void
+meta_window_grab_buttons (MetaWindow  *window)
+{
+  meta_window_ungrab_buttons (window);
+
+  if (window->type == META_WINDOW_DOCK ||
+      window->override_redirect)
+    return;
+
+  grab_buttons (window->display->button_bindings,
+                window->display->n_button_bindings,
+                window->display, window->xwindow,
+                TRUE, TRUE);
+
+  window->buttons_grabbed = TRUE;
+}
+
+void
+meta_window_ungrab_buttons (MetaWindow  *window)
+{
+  if (!window->buttons_grabbed)
+    return;
+
+  grab_buttons (window->display->button_bindings,
+                window->display->n_button_bindings,
+                window->display, window->xwindow,
+                TRUE, FALSE);
+
+  window->buttons_grabbed = FALSE;
 }
 
 #ifdef WITH_VERBOSE_MODE
@@ -1094,7 +1294,7 @@ meta_screen_grab_all_keys (MetaScreen *screen, guint32 timestamp)
 
   if (screen->all_keys_grabbed)
     return FALSE;
-  
+
   if (screen->keys_grabbed)
     meta_screen_ungrab_keys (screen);
 
@@ -1336,13 +1536,12 @@ primary_modifier_still_pressed (MetaDisplay *display,
 }
 
 static void
-invoke_handler (MetaDisplay    *display,
-                MetaScreen     *screen,
-                MetaKeyHandler *handler,
-                MetaWindow     *window,
-                XEvent         *event,
-                MetaKeyBinding *binding)
-
+invoke_handler (MetaDisplay        *display,
+                MetaScreen         *screen,
+                MetaBindingHandler *handler,
+                MetaWindow         *window,
+                XEvent             *event,
+                gpointer            binding)
 {
   if (handler->func)
     (* handler->func) (display, screen,
@@ -1361,29 +1560,60 @@ invoke_handler (MetaDisplay    *display,
 }
 
 static void
-invoke_handler_by_name (MetaDisplay    *display,
-                        MetaScreen     *screen,
-                        const char     *handler_name,
-                        MetaWindow     *window,
-                        XEvent         *event)
+invoke_keybinding_handler_by_name (MetaDisplay    *display,
+                                   MetaScreen     *screen,
+                                   const char     *handler_name,
+                                   MetaWindow     *window,
+                                   XEvent         *event)
 {
-  MetaKeyHandler *handler;
+  MetaBindingHandler *handler;
 
-  handler = HANDLER (handler_name);
+  handler = g_hash_table_lookup (key_handlers, handler_name);
   if (handler)
     invoke_handler (display, screen, handler, window, event, NULL);
 }
 
-/* now called from only one place, may be worth merging */
+gboolean
+meta_display_process_button_event (MetaDisplay          *display,
+                                   MetaWindow           *window,
+                                   XEvent               *event,
+                                   gboolean              frame_was_receiver)
+{
+  int i;
+  unsigned int event_mask;
+
+  event_mask = event->xbutton.state & 0xff & ~(display->ignored_modifier_mask);
+
+  for (i = 0; i < display->n_button_bindings; i++)
+    {
+      MetaButtonBinding *binding = &display->button_bindings[i];
+      MetaBindingHandler *handler = binding->handler;
+
+      if (event->xbutton.button != binding->button ||
+          event_mask != binding->mask)
+        continue;
+
+      if (!frame_was_receiver && ((handler->flags & META_KEY_BINDING_FRAME_ONLY) != 0))
+        continue;
+
+      invoke_handler (display, meta_window_get_screen (window),
+                      handler, window, event, binding);
+
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
 static gboolean
-process_event (MetaKeyBinding       *bindings,
-               int                   n_bindings,
-               MetaDisplay          *display,
-               MetaScreen           *screen,
-               MetaWindow           *window,
-               XEvent               *event,
-               KeySym                keysym,
-               gboolean              on_window)
+process_key_event (MetaKeyBinding       *bindings,
+                   int                   n_bindings,
+                   MetaDisplay          *display,
+                   MetaScreen           *screen,
+                   MetaWindow           *window,
+                   XEvent               *event,
+                   KeySym                keysym,
+                   gboolean              on_window)
 {
   int i;
 
@@ -1397,7 +1627,7 @@ process_event (MetaKeyBinding       *bindings,
    */
   for (i=0; i<n_bindings; i++)
     {
-      MetaKeyHandler *handler = bindings[i].handler;
+      MetaBindingHandler *handler = bindings[i].handler;
 
       if ((!on_window && handler->flags & META_KEY_BINDING_PER_WINDOW) ||
           event->type != KeyPress ||
@@ -1464,10 +1694,10 @@ process_overlay_key (MetaDisplay *display,
            * the event. Other clients with global grabs will be out of
            * luck.
            */
-          if (process_event (display->key_bindings,
-                             display->n_key_bindings,
-                             display, screen, NULL, event, keysym,
-                             FALSE))
+          if (process_key_event (display->key_bindings,
+                                 display->n_key_bindings,
+                                 display, screen, NULL, event, keysym,
+                                 FALSE))
             {
               /* As normally, after we've handled a global key
                * binding, we unfreeze the keyboard but keep the grab
@@ -1672,10 +1902,10 @@ meta_display_process_key_event (MetaDisplay *display,
     }
   
   /* Do the normal keybindings */
-  return process_event (display->key_bindings,
-                        display->n_key_bindings,
-                        display, screen, window, event, keysym,
-                        !all_keys_grabbed && window);
+  return process_key_event (display->key_bindings,
+                            display->n_key_bindings,
+                            display, screen, window, event, keysym,
+                            !all_keys_grabbed && window);
 }
 
 static gboolean
@@ -2268,7 +2498,7 @@ process_tab_grab (MetaDisplay *display,
         {
           if (end_keyboard_grab (display, event->xkey.keycode))
             {
-              invoke_handler_by_name (display, screen, "tab-popup-select", NULL, event);
+              invoke_keybinding_handler_by_name (display, screen, "tab-popup-select", NULL, event);
 
               /* We return FALSE to end the grab; if the handler ended the grab itself
                * that will be a noop. If the handler didn't end the grab, then it's a
@@ -2324,7 +2554,7 @@ process_tab_grab (MetaDisplay *display,
         }
 
       /* Some unhandled key press */
-      invoke_handler_by_name (display, screen, "tab-popup-cancel", NULL, event);
+      invoke_keybinding_handler_by_name (display, screen, "tab-popup-cancel", NULL, event);
       return FALSE;
     }
 
@@ -2977,11 +3207,11 @@ handle_toggle_recording (MetaDisplay    *display,
 
 static void
 handle_activate_window_menu (MetaDisplay    *display,
-                      MetaScreen     *screen,
-                      MetaWindow     *event_window,
-                      XEvent         *event,
-                      MetaKeyBinding *binding,
-                      gpointer        dummy)
+                             MetaScreen     *screen,
+                             MetaWindow     *event_window,
+                             XEvent         *event,
+                             gpointer        binding,
+                             gpointer        dummy)
 {
   if (display->focus_window)
     {
@@ -3593,29 +3823,51 @@ meta_set_keybindings_disabled (gboolean setting)
               "Keybindings %s\n", all_bindings_disabled ? "disabled" : "enabled");
 }
 
+static gboolean
+meta_bindings_set_custom_handler (GHashTable             *handler_table,
+                                  const gchar            *name,
+                                  MetaBindingHandlerFunc  func,
+                                  gpointer                user_data,
+                                  GDestroyNotify          free_data)
+{
+  MetaBindingHandler *handler = g_hash_table_lookup (handler_table, name);
+
+  if (!handler)
+    return FALSE;
+
+  if (handler->user_data_free_func && handler->user_data)
+    handler->user_data_free_func (handler->user_data);
+
+  handler->func = func;
+  handler->user_data = user_data;
+  handler->user_data_free_func = free_data;
+  return TRUE;
+}
+
 gboolean
 meta_keybindings_set_custom_handler (const gchar        *name,
                                      MetaKeyHandlerFunc  handler,
                                      gpointer            user_data,
                                      GDestroyNotify      free_data)
 {
-  MetaKeyHandler *key_handler = HANDLER (name);
+  return meta_bindings_set_custom_handler (key_handlers, name,
+                                           (MetaBindingHandlerFunc) handler,
+                                           user_data, free_data);
+}
 
-  if (!key_handler)
-    return FALSE;
-
-  if (key_handler->user_data_free_func && key_handler->user_data)
-    key_handler->user_data_free_func (key_handler->user_data);
-
-  key_handler->func = handler;
-  key_handler->user_data = user_data;
-  key_handler->user_data_free_func = free_data;
-
-  return TRUE;
+gboolean
+meta_buttonbindings_set_custom_handler (const gchar          *name,
+                                        MetaButtonHandlerFunc handler,
+                                        gpointer              user_data,
+                                        GDestroyNotify        free_data)
+{
+  return meta_bindings_set_custom_handler (button_handlers, name,
+                                           (MetaBindingHandlerFunc) handler,
+                                           user_data, free_data);
 }
 
 static void
-init_builtin_key_bindings (MetaDisplay *display)
+init_builtin_bindings (MetaDisplay *display)
 {
 #define REVERSES_AND_REVERSED (META_KEY_BINDING_REVERSES | \
                                META_KEY_BINDING_IS_REVERSED)
@@ -3720,7 +3972,6 @@ init_builtin_key_bindings (MetaDisplay *display)
                           META_KEY_BINDING_NONE,
                           META_KEYBINDING_ACTION_WORKSPACE_DOWN,
                           handle_switch_to_workspace, META_MOTION_DOWN);
-
 
   /* The ones which have inverses.  These can't be bound to any keystroke
    * containing Shift because Shift will invert their "backward" state.
@@ -3886,7 +4137,13 @@ init_builtin_key_bindings (MetaDisplay *display)
                           SCHEMA_COMMON_KEYBINDINGS,
                           META_KEY_BINDING_PER_WINDOW,
                           META_KEYBINDING_ACTION_ACTIVATE_WINDOW_MENU,
-                          handle_activate_window_menu, 0);
+                          (MetaKeyHandlerFunc) handle_activate_window_menu, 0);
+
+  add_builtin_buttonbinding (display,
+                             "activate-window-menu",
+                             SCHEMA_MUTTER_KEYBINDINGS,
+                             META_KEY_BINDING_NONE,
+                             (MetaButtonHandlerFunc) handle_activate_window_menu, 0);
 
   add_builtin_keybinding (display,
                           "toggle-fullscreen",
@@ -4221,10 +4478,13 @@ meta_display_init_keys (MetaDisplay *display)
   reload_modmap (display);
 
   key_handlers = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
-                                        (GDestroyNotify) key_handler_free);
-  init_builtin_key_bindings (display);
+                                        (GDestroyNotify) binding_handler_free);
+  button_handlers = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
+                                           (GDestroyNotify) binding_handler_free);
+  init_builtin_bindings (display);
 
   rebuild_key_binding_table (display);
+  rebuild_button_binding_table (display);
   rebuild_special_bindings (display);
 
   reload_keycodes (display);

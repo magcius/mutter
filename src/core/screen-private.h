@@ -125,6 +125,7 @@ struct _MetaScreen
   guint workspace_layout_overridden : 1;
   
   guint keys_grabbed : 1;
+  guint buttons_grabbed : 1;
   guint all_keys_grabbed : 1;
   
   int closing;

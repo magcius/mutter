@@ -916,7 +916,9 @@ meta_screen_new (MetaDisplay *display,
 
   screen->all_keys_grabbed = FALSE;
   screen->keys_grabbed = FALSE;
+  screen->buttons_grabbed = FALSE;
   meta_screen_grab_keys (screen);
+  meta_screen_grab_buttons (screen);
 
   screen->ui = meta_ui_new (screen->display->xdisplay,
                             screen->xscreen);
@@ -983,6 +985,7 @@ meta_screen_free (MetaScreen *screen,
   meta_prefs_remove_listener (prefs_changed_callback, screen);
   
   meta_screen_ungrab_keys (screen);
+  meta_screen_ungrab_buttons (screen);
 
 #ifdef HAVE_STARTUP_NOTIFICATION
   g_slist_foreach (screen->startup_sequences,

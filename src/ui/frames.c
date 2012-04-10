@@ -709,8 +709,6 @@ meta_frames_manage_window (MetaFrames *frames,
    * and meta_ui_create_frame_window() return to meta_window_ensure_frame().
    */
   
-  meta_core_grab_buttons (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow);
-  
   g_hash_table_replace (frames->frames, &frame->xwindow, frame);
 }
 

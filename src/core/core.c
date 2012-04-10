@@ -719,18 +719,6 @@ meta_core_get_grab_button (Display  *xdisplay)
 }
 
 void
-meta_core_grab_buttons  (Display *xdisplay,
-                         Window   frame_xwindow)
-{
-  MetaDisplay *display;
-    
-  display = meta_display_for_x_display (xdisplay);
-
-  meta_verbose ("Grabbing buttons on frame 0x%lx\n", frame_xwindow);
-  meta_display_grab_window_buttons (display, frame_xwindow);
-}
-
-void
 meta_core_set_screen_cursor (Display *xdisplay,
                              Window   frame_on_screen,
                              MetaCursor cursor)

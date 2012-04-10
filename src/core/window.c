@@ -1271,7 +1271,7 @@ meta_window_new_with_attrs (MetaDisplay       *display,
   meta_window_grab_keys (window);
   if (window->type != META_WINDOW_DOCK && !window->override_redirect)
     {
-      meta_display_grab_window_buttons (window->display, window->xwindow);
+      meta_window_grab_buttons (window);
       meta_display_grab_focus_window_button (window->display, window);
     }
 
@@ -1856,8 +1856,8 @@ meta_window_unmanage (MetaWindow  *window,
     }
 
   meta_window_ungrab_keys (window);
-  meta_display_ungrab_window_buttons (window->display, window->xwindow);
   meta_display_ungrab_focus_window_button (window->display, window);
+  meta_window_ungrab_buttons (window);
 
   meta_display_unregister_x_window (window->display, window->xwindow);
 

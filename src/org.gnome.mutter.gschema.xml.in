@@ -111,5 +111,17 @@
       <_summary>Cancel tab popup</_summary>
     </key>
 
+    <key name="move-window" type="as">
+      <default><![CDATA[['<Alt>1', '<Shift><Alt>1']]]></default>
+    </key>
+
+    <key name="resize-window" type="as">
+      <default><![CDATA[['<Alt>2']]]></default>
+    </key>
+
+    <key name="activate-window-menu" type="as">
+      <default><![CDATA[['<Alt>3']]]></default>
+    </key>
+
   </schema>
 </schemalist>

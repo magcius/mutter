@@ -3206,6 +3206,86 @@ handle_toggle_recording (MetaDisplay    *display,
 }
 
 static void
+handle_move_window (MetaDisplay       *display,
+                    MetaScreen        *screen,
+                    MetaWindow        *window,
+                    XEvent            *event,
+                    MetaButtonBinding *binding,
+                    gpointer           dummy)
+{
+  if (window->has_move_func)
+    {
+      meta_display_begin_grab_op (display,
+                                  window->screen,
+                                  window,
+                                  META_GRAB_OP_MOVING,
+                                  TRUE,
+                                  FALSE,
+                                  event->xbutton.button,
+                                  0,
+                                  event->xbutton.time,
+                                  event->xbutton.x_root,
+                                  event->xbutton.y_root);
+    }
+}
+
+static void
+handle_resize_window (MetaDisplay       *display,
+                      MetaScreen        *screen,
+                      MetaWindow        *window,
+                      XEvent            *event,
+                      MetaButtonBinding *binding,
+                      gpointer           dummy)
+{
+  if (window->has_resize_func)
+    {
+      gboolean north, south;
+      gboolean west, east;
+      int root_x, root_y;
+      MetaGrabOp op;
+
+      meta_window_get_position (window, &root_x, &root_y);
+
+      west = event->xbutton.x_root <  (root_x + 1 * window->rect.width  / 3);
+      east = event->xbutton.x_root >  (root_x + 2 * window->rect.width  / 3);
+      north = event->xbutton.y_root < (root_y + 1 * window->rect.height / 3);
+      south = event->xbutton.y_root > (root_y + 2 * window->rect.height / 3);
+
+      if (north && west)
+        op = META_GRAB_OP_RESIZING_NW;
+      else if (north && east)
+        op = META_GRAB_OP_RESIZING_NE;
+      else if (south && west)
+        op = META_GRAB_OP_RESIZING_SW;
+      else if (south && east)
+        op = META_GRAB_OP_RESIZING_SE;
+      else if (north)
+        op = META_GRAB_OP_RESIZING_N;
+      else if (west)
+        op = META_GRAB_OP_RESIZING_W;
+      else if (east)
+        op = META_GRAB_OP_RESIZING_E;
+      else if (south)
+        op = META_GRAB_OP_RESIZING_S;
+      else /* Middle region is no-op to avoid user triggering wrong action */
+        op = META_GRAB_OP_NONE;
+
+      if (op != META_GRAB_OP_NONE)
+        meta_display_begin_grab_op (display,
+                                    window->screen,
+                                    window,
+                                    op,
+                                    TRUE,
+                                    FALSE,
+                                    event->xbutton.button,
+                                    0,
+                                    event->xbutton.time,
+                                    event->xbutton.x_root,
+                                    event->xbutton.y_root);
+    }
+}
+
+static void
 handle_activate_window_menu (MetaDisplay    *display,
                              MetaScreen     *screen,
                              MetaWindow     *event_window,
@@ -3213,21 +3293,27 @@ handle_activate_window_menu (MetaDisplay    *display,
                              gpointer        binding,
                              gpointer        dummy)
 {
-  if (display->focus_window)
-    {
-      int x, y;
+  int x, y, button, time;
 
+  if (event->type == ButtonPress)
+    {
+      x = event->xbutton.x_root;
+      y = event->xbutton.y_root;
+      button = event->xbutton.button;
+      time = event->xbutton.time;
+    }
+  else
+    {
       meta_window_get_position (display->focus_window,
                                 &x, &y);
-      
       if (meta_ui_get_direction() == META_UI_DIRECTION_RTL)
-	  x += display->focus_window->rect.width;
+        x += display->focus_window->rect.width;
 
-      meta_window_show_menu (display->focus_window,
-                             x, y,
-                             0,
-                             event->xkey.time);
+      time = event->xkey.time;
+      button = 0;
     }
+
+  meta_window_show_menu (event_window, x, y, button, time);
 }
 
 static MetaGrabOp
@@ -4142,8 +4228,20 @@ init_builtin_bindings (MetaDisplay *display)
   add_builtin_buttonbinding (display,
                              "activate-window-menu",
                              SCHEMA_MUTTER_KEYBINDINGS,
-                             META_KEY_BINDING_NONE,
+                             META_KEY_BINDING_PER_WINDOW,
                              (MetaButtonHandlerFunc) handle_activate_window_menu, 0);
+
+  add_builtin_buttonbinding (display,
+                             "move-window",
+                             SCHEMA_MUTTER_KEYBINDINGS,
+                             META_KEY_BINDING_PER_WINDOW,
+                             handle_move_window, 0);
+
+  add_builtin_buttonbinding (display,
+                             "resize-window",
+                             SCHEMA_MUTTER_KEYBINDINGS,
+                             META_KEY_BINDING_PER_WINDOW,
+                             handle_resize_window, 0);
 
   add_builtin_keybinding (display,
                           "toggle-fullscreen",

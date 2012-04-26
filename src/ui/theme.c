@@ -595,6 +595,7 @@ strip_button (MetaButtonSpace *func_rects[MAX_BUTTONS_PER_CORNER],
 
 static void
 meta_frame_layout_calc_geometry (const MetaFrameLayout  *layout,
+                                 GtkStyleContext        *ctx,
                                  int                     text_height,
                                  MetaFrameFlags          flags,
                                  int                     client_width,
@@ -5545,6 +5546,7 @@ meta_theme_draw_frame_with_style (MetaTheme              *theme,
     return;
   
   meta_frame_layout_calc_geometry (style->layout,
+                                   style_gtk,
                                    text_height,
                                    flags,
                                    client_width, client_height,
@@ -5614,6 +5616,7 @@ meta_theme_get_frame_borders (MetaTheme        *theme,
 
 void
 meta_theme_calc_geometry (MetaTheme              *theme,
+                          GtkStyleContext        *ctx,
                           MetaFrameType           type,
                           int                     text_height,
                           MetaFrameFlags          flags,
@@ -5633,6 +5636,7 @@ meta_theme_calc_geometry (MetaTheme              *theme,
     return;
 
   meta_frame_layout_calc_geometry (style->layout,
+                                   ctx,
                                    text_height,
                                    flags,
                                    client_width, client_height,

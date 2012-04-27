@@ -379,6 +379,19 @@ meta_frame_layout_unref (MetaFrameLayout *layout)
     }
 }
 
+static GtkStateFlags
+get_style_flags (MetaFrameFlags flags)
+{
+  GtkStateFlags gtk_flags;
+
+  gtk_flags = GTK_STATE_FLAG_NORMAL;
+
+  if ((flags & META_FRAME_HAS_FOCUS) == 0)
+    gtk_flags |= GTK_STATE_FLAG_BACKDROP;
+
+  return gtk_flags;
+}
+
 void
 meta_frame_layout_get_borders (const MetaFrameLayout *layout,
                                int                    text_height,
@@ -4616,7 +4629,6 @@ meta_frame_style_draw_with_style (MetaFrameStyle          *style,
                                   GdkPixbuf               *mini_icon,
                                   GdkPixbuf               *icon)
 {
-  GtkStateFlags gtk_flags;
   GdkRectangle visible_rect;
   const MetaFrameBorders *borders;
 
@@ -4627,14 +4639,9 @@ meta_frame_style_draw_with_style (MetaFrameStyle          *style,
   visible_rect.width = fgeom->width - borders->invisible.left - borders->invisible.right;
   visible_rect.height = fgeom->height - borders->invisible.top - borders->invisible.bottom;
 
-  gtk_flags = GTK_STATE_FLAG_NORMAL;
-
-  if ((flags & META_FRAME_HAS_FOCUS) == 0)
-    gtk_flags |= GTK_STATE_FLAG_BACKDROP;
-
   gtk_style_context_save (style_gtk);
 
-  gtk_style_context_set_state (style_gtk, gtk_flags);
+  gtk_style_context_set_state (style_gtk, get_style_flags (flags));
 
   gtk_render_background (style_gtk, cr,
                          visible_rect.x,

@@ -1992,9 +1992,72 @@ meta_window_actor_sync_visibility (MetaWindowActor *self)
 }
 
 static void
+install_corners (MetaWindow       *window,
+                 MetaFrameBorders *borders,
+                 cairo_t          *cr)
+{
+  float top_left, top_right, bottom_left, bottom_right;
+  int x, y;
+  MetaRectangle outer;
+
+  meta_frame_get_corner_radiuses (window->frame,
+                                  &top_left,
+                                  &top_right,
+                                  &bottom_left,
+                                  &bottom_right);
+
+  meta_window_get_outer_rect (window, &outer);
+
+  /* top left */
+  x = borders->invisible.left;
+  y = borders->invisible.top;
+
+  cairo_arc (cr,
+             x + top_left,
+             y + top_left,
+             top_left,
+             0, M_PI*2);
+
+  /* top right */
+  x = borders->invisible.left + outer.width - top_right;
+  y = borders->invisible.top;
+
+  cairo_arc (cr,
+             x,
+             y + top_right,
+             top_right,
+             0, M_PI*2);
+
+  /* bottom right */
+  x = borders->invisible.left + outer.width - bottom_right;
+  y = borders->invisible.top + outer.height - bottom_right;
+
+  cairo_arc (cr,
+             x,
+             y,
+             bottom_right,
+             0, M_PI*2);
+
+  /* bottom left */
+  x = borders->invisible.left;
+  y = borders->invisible.top + outer.height - bottom_left;
+
+  cairo_arc (cr,
+             x + bottom_left,
+             y,
+             bottom_left,
+             0, M_PI*2);
+
+  cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+  cairo_set_source_rgba (cr, 1, 1, 1, 1);
+  cairo_fill (cr);
+}
+
+static void
 generate_mask (MetaWindowActor  *self,
                MetaFrameBorders *borders,
-               cairo_region_t   *shape_region)
+               cairo_region_t   *shape_region,
+               cairo_rectangle_int_t *client_area)
 {
   MetaWindowActorPrivate *priv = self->priv;
   guchar *mask_data;
@@ -2025,6 +2088,21 @@ generate_mask (MetaWindowActor  *self,
 
   gdk_cairo_region (cr, shape_region);
   cairo_fill (cr);
+
+  if (priv->window->frame != NULL)
+    {
+      cairo_region_t *frame_paint_region;
+      cairo_rectangle_int_t rect = { 0, 0, tex_width, tex_height };
+
+      /* Make sure we don't paint the frame over the client window. */
+      frame_paint_region = cairo_region_create_rectangle (&rect);
+      cairo_region_subtract_rectangle (frame_paint_region, client_area);
+
+      gdk_cairo_region (cr, frame_paint_region);
+      cairo_clip (cr);
+
+      install_corners (priv->window, borders, cr);
+    }
 
   cairo_destroy (cr);
   cairo_surface_destroy (surface);
@@ -2066,6 +2144,7 @@ check_needs_reshape (MetaWindowActor *self)
   MetaDisplay *display = meta_screen_get_display (screen);
   MetaFrameBorders borders;
   cairo_region_t *region;
+  cairo_rectangle_int_t client_area;
 
   if (!priv->needs_reshape)
     return;
@@ -2074,6 +2153,11 @@ check_needs_reshape (MetaWindowActor *self)
   meta_window_actor_clear_shape_region (self);
 
   meta_frame_calc_borders (priv->window->frame, &borders);
+
+  client_area.x = borders.total.left;
+  client_area.y = borders.total.top;
+  client_area.width = priv->window->rect.width;
+  client_area.height = priv->window->rect.height;
 
   region = meta_window_get_frame_bounds (priv->window);
   if (region != NULL)
@@ -2095,12 +2179,6 @@ check_needs_reshape (MetaWindowActor *self)
       Display *xdisplay = meta_display_get_xdisplay (display);
       XRectangle *rects;
       int n_rects, ordering;
-      cairo_rectangle_int_t client_area;
-
-      client_area.width = priv->window->rect.width;
-      client_area.height = priv->window->rect.height;
-      client_area.x = borders.total.left;
-      client_area.y = borders.total.top;
 
       /* Punch out client area. */
       cairo_region_subtract_rectangle (region, &client_area);
@@ -2129,7 +2207,7 @@ check_needs_reshape (MetaWindowActor *self)
     }
 #endif
 
-  generate_mask (self, &borders, region);
+  generate_mask (self, &borders, region, &client_area);
   meta_window_actor_update_shape_region (self, region);
 
   cairo_region_destroy (region);

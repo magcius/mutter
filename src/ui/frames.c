@@ -590,6 +590,7 @@ meta_frames_get_borders (MetaFrames *frames,
    * window size
    */
   meta_theme_get_frame_borders (frame->tv->theme,
+                                frame->tv->style_context,
                                 type,
                                 frame->text_height,
                                 flags,
@@ -1553,6 +1554,7 @@ clip_region_to_visible_frame_border (cairo_region_t *region,
                  META_CORE_GET_END);
 
   meta_theme_get_frame_borders (frame->tv->theme,
+                                frame->tv->style_context,
                                 type, frame->text_height, flags, 
                                 &borders);
 

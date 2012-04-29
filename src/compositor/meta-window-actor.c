@@ -2106,6 +2106,11 @@ generate_mask (MetaWindowActor  *self,
                                                  stride);
   cr = cairo_create (surface);
 
+  /* XXX: work around cairo bug. remove when released
+   * http://cgit.freedesktop.org/cairo/commit/?id=ec400daf9ec3bbd8403324db7fcdaf175e185e7b
+   */
+  cairo_push_group (cr);
+
   gdk_cairo_region (cr, shape_region);
   cairo_fill (cr);
 
@@ -2123,6 +2128,9 @@ generate_mask (MetaWindowActor  *self,
 
       install_corners (priv->window, borders, cr);
     }
+
+  cairo_pop_group_to_source (cr);
+  cairo_paint (cr);
 
   cairo_destroy (cr);
   cairo_surface_destroy (surface);

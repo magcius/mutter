@@ -5505,38 +5505,6 @@ theme_get_style (MetaTheme     *theme,
   return style;
 }
 
-MetaFrameStyle*
-meta_theme_get_frame_style (MetaTheme     *theme,
-                            MetaFrameType  type,
-                            MetaFrameFlags flags)
-{
-  MetaFrameStyle *style;
-
-  g_return_val_if_fail (type < META_FRAME_TYPE_LAST, NULL);
-  
-  style = theme_get_style (theme, type, flags);
-
-  return style;
-}
-
-double
-meta_theme_get_title_scale (MetaTheme     *theme,
-                            MetaFrameType  type,
-                            MetaFrameFlags flags)
-{
-  MetaFrameStyle *style;
-
-  g_return_val_if_fail (type < META_FRAME_TYPE_LAST, 1.0);
-  
-  style = theme_get_style (theme, type, flags);
-  
-  /* Parser is not supposed to allow this currently */
-  if (style == NULL)
-    return 1.0;
-
-  return style->layout->title_scale;
-}
-
 void
 meta_theme_draw_frame_with_style (MetaTheme              *theme,
                                   GtkStyleContext        *style_gtk,
@@ -5926,28 +5894,6 @@ meta_theme_lookup_color_constant (MetaTheme   *theme,
     }
 }
 
-
-PangoFontDescription*
-meta_gtk_widget_get_font_desc (GtkWidget *widget,
-                               double     scale,
-			       const PangoFontDescription *override)
-{
-  GtkStyleContext *style;
-  PangoFontDescription *font_desc;
-  
-  g_return_val_if_fail (gtk_widget_get_realized (widget), NULL);
-
-  style = gtk_widget_get_style_context (widget);
-  font_desc = pango_font_description_copy (gtk_style_context_get_font (style, 0));
-
-  if (override)
-    pango_font_description_merge (font_desc, override, TRUE);
-
-  pango_font_description_set_size (font_desc,
-                                   MAX (pango_font_description_get_size (font_desc) * scale, 1));
-
-  return font_desc;
-}
 
 MetaGtkColorComponent
 meta_color_component_from_string (const char *str)

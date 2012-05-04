@@ -1004,14 +1004,6 @@ GdkPixbuf* meta_theme_load_image (MetaTheme  *theme,
                                   guint       size_of_theme_icons,
                                   GError    **error);
 
-MetaFrameStyle* meta_theme_get_frame_style (MetaTheme     *theme,
-                                            MetaFrameType  type,
-                                            MetaFrameFlags flags);
-
-double meta_theme_get_title_scale (MetaTheme     *theme,
-                                   MetaFrameType  type,
-                                   MetaFrameFlags flags);
-
 void meta_theme_render_background (GtkStyleContext *style,
                                    cairo_t         *cr,
                                    MetaFrameFlags   flags,
@@ -1106,13 +1098,6 @@ gboolean     meta_theme_replace_constants     (MetaTheme    *theme,
                                                PosToken     *tokens,
                                                int           n_tokens,
                                                GError      **err);
-
-/* random stuff */
-
-PangoFontDescription* meta_gtk_widget_get_font_desc        (GtkWidget            *widget,
-                                                            double                scale,
-							    const PangoFontDescription *override);
-
 
 /* Enum converters */
 MetaGtkColorComponent meta_color_component_from_string (const char            *str);

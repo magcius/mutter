@@ -183,8 +183,6 @@ prefs_changed_callback (MetaPreference pref,
 static void
 meta_frames_init (MetaFrames *frames)
 {
-  frames->text_heights = g_hash_table_new (NULL, NULL);
-  
   frames->frames = g_hash_table_new (unsigned_long_hash, unsigned_long_equal);
 
   gtk_widget_set_double_buffered (GTK_WIDGET (frames), FALSE);
@@ -235,8 +233,6 @@ meta_frames_finalize (GObject *object)
   frames = META_FRAMES (object);
 
   meta_prefs_remove_listener (prefs_changed_callback, frames);
-  
-  g_hash_table_destroy (frames->text_heights);
   
   g_assert (g_hash_table_size (frames->frames) == 0);
   g_hash_table_destroy (frames->frames);
@@ -342,7 +338,6 @@ meta_frames_calc_geometry (MetaFrames        *frames,
   meta_theme_calc_geometry (frame->tv->theme,
                             frame->tv->style_context,
                             type,
-                            frame->text_height,
                             flags,
                             width, height,
                             &button_layout,
@@ -402,7 +397,6 @@ meta_frames_manage_window (MetaFrames *frames,
   
   frame->xwindow = xwindow;
   frame->layout = NULL;
-  frame->text_height = -1;
   frame->title = NULL;
   frame->shape_applied = FALSE;
   frame->prelit_control = META_FRAME_CONTROL_NONE;
@@ -511,7 +505,6 @@ meta_frames_get_borders (MetaFrames *frames,
   meta_theme_get_frame_borders (frame->tv->theme,
                                 frame->tv->style_context,
                                 type,
-                                frame->text_height,
                                 flags,
                                 borders);
 }
@@ -1443,7 +1436,7 @@ clip_region_to_visible_frame_border (cairo_region_t *region,
 
   meta_theme_get_frame_borders (frame->tv->theme,
                                 frame->tv->style_context,
-                                type, frame->text_height, flags, 
+                                type, flags,
                                 &borders);
 
   /* Visible frame rect */
@@ -1628,7 +1621,6 @@ meta_frames_paint (MetaFrames   *frames,
                                     flags,
                                     w, h,
                                     frame->layout,
-                                    frame->text_height,
                                     &button_layout,
                                     button_states,
                                     mini_icon, icon);

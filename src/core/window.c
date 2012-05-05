@@ -8328,6 +8328,8 @@ meta_window_show_menu (MetaWindow *window,
 
   menu =
     meta_ui_window_menu_new (window->screen->ui,
+                             window->display->xdisplay,
+                             window->screen->number,
                              window->xwindow,
                              ops,
                              insensitive,

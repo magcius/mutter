@@ -72,6 +72,11 @@ meta_uiframe_init (MetaUIFrame *frame)
   gtk_container_add (GTK_CONTAINER (frame), container);
   gtk_container_add (GTK_CONTAINER (container), frame->label);
 
+  gtk_widget_set_hexpand (container, TRUE);
+  gtk_widget_set_hexpand (label, TRUE);
+  gtk_widget_set_halign (label, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (label, GTK_ALIGN_START);
+
   gtk_widget_show_all (GTK_WIDGET (container));
 }
 
@@ -1080,6 +1085,34 @@ meta_uiframe_draw (GtkWidget *widget,
   return TRUE;
 }
 
+static void
+meta_uiframe_size_allocate (GtkWidget     *widget,
+                            GtkAllocation *allocation)
+{
+  MetaUIFrame *frame = META_UIFRAME (widget);
+  GtkWidget *child = gtk_bin_get_child (GTK_BIN (widget));
+
+  gtk_widget_set_allocation (widget, allocation);
+
+  if (child && gtk_widget_get_visible (child))
+    {
+      MetaFrameGeometry fgeom;
+      GtkAllocation child_allocation;
+      GtkBorder *invisible;
+
+      meta_uiframe_calc_geometry (frame, &fgeom);
+      invisible = &(fgeom.borders.invisible);
+
+      child_allocation = *allocation;
+      child_allocation.x += invisible->left;
+      child_allocation.y += invisible->top;
+      child_allocation.width -= invisible->left + invisible->right;
+      child_allocation.height -= invisible->top + invisible->bottom;
+
+      gtk_widget_size_allocate (child, &child_allocation);
+    }
+}
+
 static gboolean
 meta_uiframe_enter_notify_event      (GtkWidget           *widget,
                                       GdkEventCrossing    *event)
@@ -1341,6 +1374,7 @@ meta_uiframe_class_init (MetaUIFrameClass *class)
   gobject_class->finalize = meta_uiframe_finalize;
 
   widget_class->draw = meta_uiframe_draw;
+  widget_class->size_allocate = meta_uiframe_size_allocate;
   widget_class->button_press_event = meta_uiframe_button_press_event;
   widget_class->button_release_event = meta_uiframe_button_release_event;
   widget_class->motion_notify_event = meta_uiframe_motion_notify_event;

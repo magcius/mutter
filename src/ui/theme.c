@@ -36,6 +36,7 @@
  */
 
 #include <config.h>
+#include "uiframe.h"
 #include "theme-private.h"
 #include <meta/util.h>
 #include <meta/gradient.h>
@@ -5130,7 +5131,7 @@ create_style_context (gchar *variant)
                 NULL);
 
   path = gtk_widget_path_new ();
-  gtk_widget_path_append_type (path, GTK_TYPE_WINDOW);
+  gtk_widget_path_append_type (path, META_TYPE_UIFRAME);
 
   style = gtk_style_context_new ();
   gtk_style_context_set_path (style, path);

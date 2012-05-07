@@ -4602,11 +4602,13 @@ meta_theme_set_current (const char *name,
 /* owns style context */
 static MetaThemeVariant *
 meta_theme_variant_new (MetaTheme *theme,
-                        GtkStyleContext *style_context)
+                        GtkStyleContext *style_context,
+                        gchar *variant)
 {
   MetaThemeVariant *tv = g_slice_new (MetaThemeVariant);
   tv->theme = theme;
   tv->style_context = style_context;
+  tv->variant = g_strdup (variant);
   return tv;
 }
 
@@ -4616,6 +4618,7 @@ meta_theme_variant_free (gpointer data)
   MetaThemeVariant *tv = data;
 
   g_object_unref (tv->style_context);
+  g_free (tv->variant);
   g_slice_free (MetaThemeVariant, tv);
 }
 
@@ -4668,7 +4671,7 @@ meta_theme_get_variant (MetaTheme *theme,
   if (tv == NULL)
     {
       GtkStyleContext *style = create_style_context (variant);
-      tv = meta_theme_variant_new (theme, style);
+      tv = meta_theme_variant_new (theme, style, variant);
       g_hash_table_insert (theme->theme_variants, g_strdup (variant), tv);
     }
 
@@ -4716,7 +4719,7 @@ meta_theme_new (void)
                            g_free,
                            (GDestroyNotify) meta_frame_style_set_unref);
 
-  theme->normal_variant = meta_theme_variant_new (theme, create_style_context (NULL));
+  theme->normal_variant = meta_theme_variant_new (theme, create_style_context (NULL), NULL);
   theme->theme_variants = g_hash_table_new_full (g_str_hash, g_str_equal,
                                                  g_free, meta_theme_variant_free);
   

@@ -877,6 +877,7 @@ struct _MetaThemeVariant
 {
   MetaTheme *theme;
   GtkStyleContext *style_context;
+  gchar *variant;
 };
 
 struct _MetaPositionExprEnv

@@ -91,6 +91,15 @@ meta_uiframe_attach_style (MetaUIFrame *frame)
                  META_CORE_GET_THEME_VARIANT, &variant,
                  META_CORE_GET_END);
 
+  /* This is somewhat dirty. We don't use the style context
+   * associated with the widget when drawing, we just use it
+   * to invalidate it, which will cause style-changed to be
+   * emitted. */
+  gtk_style_context_invalidate (gtk_widget_get_style_context (GTK_WIDGET (frame)));
+
+  if (frame->tv != NULL && g_strcmp0 (frame->tv->variant, variant) == 0)
+    return;
+
   frame->tv = meta_theme_get_variant (meta_theme_get_current (),
                                       variant);
 }

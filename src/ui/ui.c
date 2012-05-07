@@ -600,7 +600,6 @@ meta_ui_update_frame_style (MetaUI  *ui,
 {
   MetaUIFrame *frame = meta_ui_lookup_window (ui, xwindow);
   meta_uiframe_attach_style (frame);
-  gtk_widget_queue_draw (GTK_WIDGET (frame));
 }
 
 void

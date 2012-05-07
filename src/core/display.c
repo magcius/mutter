@@ -4189,12 +4189,11 @@ meta_display_queue_retheme_all_windows (MetaDisplay *display)
   while (tmp != NULL)
     {
       MetaWindow *window = tmp->data;
-      
+
       meta_window_queue (window, META_QUEUE_MOVE_RESIZE);
       if (window->frame)
-        {
-          meta_frame_queue_draw (window->frame);
-        }
+        meta_ui_update_frame_style (window->screen->ui,
+                                    window->frame->xwindow);
       
       tmp = tmp->next;
     }

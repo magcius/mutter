@@ -176,5 +176,6 @@ void meta_display_unmanage_screen (MetaDisplay *display,
                                    guint32      timestamp);
 
 void meta_display_clear_mouse_mode (MetaDisplay *display);
+void meta_display_retheme_all (void);
 
 #endif

@@ -30,8 +30,6 @@
 #include <meta/common.h>
 #include <gtk/gtk.h>
 
-typedef struct _MetaThemeVariant MetaThemeVariant;
-
 /**
  * MetaFrameStyle: (skip)
  *
@@ -829,16 +827,6 @@ struct _MetaTheme
   GQuark quark_title_height;
   GQuark quark_frame_x_center;
   GQuark quark_frame_y_center;
-
-  GHashTable *theme_variants;
-  MetaThemeVariant *normal_variant;
-};
-
-struct _MetaThemeVariant
-{
-  MetaTheme *theme;
-  GtkStyleContext *style_context;
-  gchar *variant;
 };
 
 struct _MetaPositionExprEnv
@@ -1074,9 +1062,6 @@ void                  meta_gtk_style_get_dark_color    (GtkStyleContext      *st
 
 guint meta_theme_earliest_version_with_button (MetaButtonType type);
 
-
-MetaThemeVariant * meta_theme_get_variant (MetaTheme *theme,
-                                           gchar     *variant);
 
 #define META_THEME_ALLOWS(theme, feature) (theme->format_version >= feature)
 

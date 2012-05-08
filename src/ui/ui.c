@@ -388,8 +388,8 @@ meta_ui_get_frame_borders (MetaUI *ui,
    * by the core move/resize code to decide on the client
    * window size
    */
-  meta_theme_get_frame_borders (frame->tv->theme,
-                                frame->tv->style_context,
+  meta_theme_get_frame_borders (frame->theme,
+                                gtk_widget_get_style_context (GTK_WIDGET (frame)),
                                 type,
                                 flags,
                                 borders);

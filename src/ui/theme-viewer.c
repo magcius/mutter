@@ -952,7 +952,7 @@ run_theme_benchmark (void)
   gtk_widget_realize (widget);
   
   meta_theme_get_frame_borders (global_theme,
-                                meta_theme_get_variant (global_theme, NULL)->style_context,
+                                gtk_widget_get_style_context (widget),
                                 META_FRAME_TYPE_NORMAL,
                                 get_flags (widget),
                                 &borders);

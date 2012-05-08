@@ -368,7 +368,7 @@ meta_frame_layout_unref (MetaFrameLayout *layout)
 }
 
 static GtkStateFlags
-get_style_flags (MetaFrameFlags flags)
+get_state_flags (MetaFrameFlags flags)
 {
   GtkStateFlags gtk_flags;
 
@@ -396,11 +396,11 @@ meta_frame_layout_get_borders (GtkStyleContext       *style_context,
     return;
 
   gtk_style_context_get_border (style_context,
-                                get_style_flags (flags),
+                                get_state_flags (flags),
                                 &borders->visible);
 
   gtk_style_context_get_padding (style_context,
-                                 get_style_flags (flags),
+                                 get_state_flags (flags),
                                  &padding);
 
   borders->visible.left += padding.left;
@@ -3952,7 +3952,7 @@ meta_theme_render_background (GtkStyleContext *style_gtk,
 
   gtk_style_context_save (style_gtk);
 
-  gtk_style_context_set_state (style_gtk, get_style_flags (flags));
+  gtk_style_context_set_state (style_gtk, get_state_flags (flags));
 
   gtk_render_background (style_gtk, cr,
                          visible_rect.x,

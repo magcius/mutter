@@ -131,7 +131,7 @@ ensure_info (MetaPreview *preview)
     {
       if (preview->theme)
         meta_theme_get_frame_borders (preview->theme,
-                                      meta_theme_get_variant (preview->theme, NULL)->style_context,
+                                      gtk_widget_get_style_context (widget),
                                       preview->type,
                                       preview->flags,
                                       &preview->borders);

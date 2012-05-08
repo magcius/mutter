@@ -396,11 +396,11 @@ meta_frame_layout_get_borders (GtkStyleContext       *style_context,
     return;
 
   gtk_style_context_get_border (style_context,
-                                get_style_flags (flags),
+                                get_state_flags (flags),
                                 &borders->visible);
 
   gtk_style_context_get_padding (style_context,
-                                 get_style_flags (flags),
+                                 get_state_flags (flags),
                                  &padding);
 
   borders->visible.left += padding.left;

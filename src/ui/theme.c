@@ -367,8 +367,57 @@ meta_frame_layout_unref (MetaFrameLayout *layout)
     }
 }
 
-static GtkStateFlags
-get_state_flags (MetaFrameFlags flags)
+static MetaFrameState
+get_frame_state (MetaFrameFlags flags)
+{
+  switch (flags & (META_FRAME_MAXIMIZED | META_FRAME_SHADED |
+                   META_FRAME_TILED_LEFT | META_FRAME_TILED_RIGHT))
+    {
+    case 0:
+      return META_FRAME_STATE_NORMAL;
+    case META_FRAME_MAXIMIZED:
+      return META_FRAME_STATE_MAXIMIZED;
+    case META_FRAME_TILED_LEFT:
+      return META_FRAME_STATE_TILED_LEFT;
+    case META_FRAME_TILED_RIGHT:
+      return META_FRAME_STATE_TILED_RIGHT;
+    case META_FRAME_SHADED:
+      return META_FRAME_STATE_SHADED;
+    case (META_FRAME_MAXIMIZED | META_FRAME_SHADED):
+      return META_FRAME_STATE_MAXIMIZED_AND_SHADED;
+    case (META_FRAME_TILED_LEFT | META_FRAME_SHADED):
+      return META_FRAME_STATE_TILED_LEFT_AND_SHADED;
+    case (META_FRAME_TILED_RIGHT | META_FRAME_SHADED):
+      return META_FRAME_STATE_TILED_RIGHT_AND_SHADED;
+    default:
+      g_assert_not_reached ();
+    }
+  return META_FRAME_STATE_LAST;
+}
+
+static MetaFrameResize
+get_frame_resize (MetaFrameFlags flags)
+{
+  switch (flags & (META_FRAME_ALLOWS_VERTICAL_RESIZE | META_FRAME_ALLOWS_HORIZONTAL_RESIZE))
+    {
+    case 0:
+      return META_FRAME_RESIZE_NONE;
+    case META_FRAME_ALLOWS_VERTICAL_RESIZE:
+      return META_FRAME_RESIZE_VERTICAL;
+    case META_FRAME_ALLOWS_HORIZONTAL_RESIZE:
+      return META_FRAME_RESIZE_HORIZONTAL;
+    case (META_FRAME_ALLOWS_VERTICAL_RESIZE | META_FRAME_ALLOWS_HORIZONTAL_RESIZE):
+      return META_FRAME_RESIZE_BOTH;
+    default:
+      g_assert_not_reached ();
+    }
+  return META_FRAME_RESIZE_LAST;
+}
+
+static void
+sync_style_context (GtkStyleContext *style_context,
+                    MetaFrameType    type,
+                    MetaFrameFlags   flags)
 {
   GtkStateFlags gtk_flags;
 
@@ -377,7 +426,17 @@ get_state_flags (MetaFrameFlags flags)
   if ((flags & META_FRAME_HAS_FOCUS) == 0)
     gtk_flags |= GTK_STATE_FLAG_BACKDROP;
 
-  return gtk_flags;
+  gtk_style_context_set_state (style_context, gtk_flags);
+
+  if (type != META_FRAME_TYPE_NORMAL)
+    gtk_style_context_add_class (style_context, meta_frame_type_to_string (type));
+
+  if ((flags & META_FRAME_ALLOWS_HORIZONTAL_RESIZE) != 0)
+    gtk_style_context_add_class (style_context, "no-horizontal-resize");
+  if ((flags & META_FRAME_ALLOWS_VERTICAL_RESIZE) != 0)
+    gtk_style_context_add_class (style_context, "no-vertical-resize");
+
+  gtk_style_context_add_class (style_context, meta_frame_state_to_string (get_frame_state (flags)));
 }
 
 static void
@@ -396,11 +455,11 @@ meta_frame_layout_get_borders (GtkStyleContext       *style_context,
     return;
 
   gtk_style_context_get_border (style_context,
-                                get_state_flags (flags),
+                                gtk_style_context_get_state (style_context),
                                 &borders->visible);
 
   gtk_style_context_get_padding (style_context,
-                                 get_state_flags (flags),
+                                 gtk_style_context_get_state (style_context),
                                  &padding);
 
   borders->visible.left += padding.left;
@@ -3934,9 +3993,10 @@ meta_frame_style_validate (MetaFrameStyle    *style,
   return TRUE;
 }
 
-void
+static void
 meta_theme_render_background (GtkStyleContext *style_gtk,
                               cairo_t         *cr,
+                              MetaFrameType    type,
                               MetaFrameFlags   flags,
                               const MetaFrameGeometry *fgeom)
 {
@@ -3951,9 +4011,7 @@ meta_theme_render_background (GtkStyleContext *style_gtk,
   visible_rect.height = fgeom->height - borders->invisible.top - borders->invisible.bottom;
 
   gtk_style_context_save (style_gtk);
-
-  gtk_style_context_set_state (style_gtk, get_state_flags (flags));
-
+  sync_style_context (style_gtk, type, flags);
   gtk_render_background (style_gtk, cr,
                          visible_rect.x,
                          visible_rect.y,
@@ -3965,13 +4023,13 @@ meta_theme_render_background (GtkStyleContext *style_gtk,
                     visible_rect.y,
                     visible_rect.width,
                     visible_rect.height);
-
   gtk_style_context_restore (style_gtk);
 }
 
 static void
 meta_frame_style_draw_with_style (MetaFrameStyle          *style,
                                   GtkStyleContext         *style_gtk,
+                                  MetaFrameType            type,
                                   MetaFrameFlags           flags,
                                   cairo_t                 *cr,
                                   const MetaFrameGeometry *fgeom,
@@ -3981,7 +4039,7 @@ meta_frame_style_draw_with_style (MetaFrameStyle          *style,
                                   GdkPixbuf               *mini_icon,
                                   GdkPixbuf               *icon)
 {
-  meta_theme_render_background (style_gtk, cr, flags, fgeom);
+  meta_theme_render_background (style_gtk, cr, type, flags, fgeom);
 }
 
 MetaFrameStyleSet*
@@ -4489,59 +4547,9 @@ theme_get_style (MetaTheme     *theme,
     style_set = theme->style_sets_by_type[META_FRAME_TYPE_NORMAL];
   if (style_set == NULL)
     return NULL;
-  
-  switch (flags & (META_FRAME_MAXIMIZED | META_FRAME_SHADED |
-                   META_FRAME_TILED_LEFT | META_FRAME_TILED_RIGHT))
-    {
-    case 0:
-      state = META_FRAME_STATE_NORMAL;
-      break;
-    case META_FRAME_MAXIMIZED:
-      state = META_FRAME_STATE_MAXIMIZED;
-      break;
-    case META_FRAME_TILED_LEFT:
-      state = META_FRAME_STATE_TILED_LEFT;
-      break;
-    case META_FRAME_TILED_RIGHT:
-      state = META_FRAME_STATE_TILED_RIGHT;
-      break;
-    case META_FRAME_SHADED:
-      state = META_FRAME_STATE_SHADED;
-      break;
-    case (META_FRAME_MAXIMIZED | META_FRAME_SHADED):
-      state = META_FRAME_STATE_MAXIMIZED_AND_SHADED;
-      break;
-    case (META_FRAME_TILED_LEFT | META_FRAME_SHADED):
-      state = META_FRAME_STATE_TILED_LEFT_AND_SHADED;
-      break;
-    case (META_FRAME_TILED_RIGHT | META_FRAME_SHADED):
-      state = META_FRAME_STATE_TILED_RIGHT_AND_SHADED;
-      break;
-    default:
-      g_assert_not_reached ();
-      state = META_FRAME_STATE_LAST; /* compiler */
-      break;
-    }
 
-  switch (flags & (META_FRAME_ALLOWS_VERTICAL_RESIZE | META_FRAME_ALLOWS_HORIZONTAL_RESIZE))
-    {
-    case 0:
-      resize = META_FRAME_RESIZE_NONE;
-      break;
-    case META_FRAME_ALLOWS_VERTICAL_RESIZE:
-      resize = META_FRAME_RESIZE_VERTICAL;
-      break;
-    case META_FRAME_ALLOWS_HORIZONTAL_RESIZE:
-      resize = META_FRAME_RESIZE_HORIZONTAL;
-      break;
-    case (META_FRAME_ALLOWS_VERTICAL_RESIZE | META_FRAME_ALLOWS_HORIZONTAL_RESIZE):
-      resize = META_FRAME_RESIZE_BOTH;
-      break;
-    default:
-      g_assert_not_reached ();
-      resize = META_FRAME_RESIZE_LAST; /* compiler */
-      break;
-    }
+  state = get_frame_state (flags);
+  resize = get_frame_resize (flags);
   
   /* re invert the styles used for focus/unfocussed while flashing a frame */
   if (((flags & META_FRAME_HAS_FOCUS) && !(flags & META_FRAME_IS_FLASHING))
@@ -4572,25 +4580,31 @@ meta_theme_draw_frame_with_style (MetaTheme              *theme,
   MetaFrameStyle *style;
 
   g_return_if_fail (type < META_FRAME_TYPE_LAST);
-  
+
   style = theme_get_style (theme, type, flags);
-  
+
   /* Parser is not supposed to allow this currently */
   if (style == NULL)
     return;
-  
+
+  gtk_style_context_save (style_gtk);
+  sync_style_context (style_gtk, type, flags);
+
   meta_frame_layout_calc_geometry (style_gtk, flags, type,
                                    client_width, client_height,
                                    &fgeom);
 
   meta_frame_style_draw_with_style (style,
                                     style_gtk,
+                                    type,
                                     flags,
                                     cr,
                                     &fgeom,
                                     client_width, client_height,
                                     button_states,
                                     mini_icon, icon);
+
+  gtk_style_context_restore (style_gtk);
 }
 
 void
@@ -4600,21 +4614,14 @@ meta_theme_get_frame_borders (MetaTheme        *theme,
                               MetaFrameFlags    flags,
                               MetaFrameBorders *borders)
 {
-  MetaFrameStyle *style;
-
   g_return_if_fail (type < META_FRAME_TYPE_LAST);
-
-  style = theme_get_style (theme, type, flags);
 
   meta_frame_borders_clear (borders);
 
-  /* Parser is not supposed to allow this currently */
-  if (style == NULL)
-    return;
-
-  meta_frame_layout_get_borders (style_context,
-                                 flags, type,
-                                 borders);
+  gtk_style_context_save (style_context);
+  sync_style_context (style_context, type, flags);
+  meta_frame_layout_get_borders (style_context, flags, type, borders);
+  gtk_style_context_restore (style_context);
 }
 
 void
@@ -4627,19 +4634,12 @@ meta_theme_calc_geometry (MetaTheme              *theme,
                           const MetaButtonLayout *button_layout,
                           MetaFrameGeometry      *fgeom)
 {
-  MetaFrameStyle *style;
-
   g_return_if_fail (type < META_FRAME_TYPE_LAST);
-  
-  style = theme_get_style (theme, type, flags);
-  
-  /* Parser is not supposed to allow this currently */
-  if (style == NULL)
-    return;
 
-  meta_frame_layout_calc_geometry (ctx, flags, type,
-                                   client_width, client_height,
-                                   fgeom);
+  gtk_style_context_save (ctx);
+  sync_style_context (ctx, type, flags);
+  meta_frame_layout_calc_geometry (ctx, flags, type, client_width, client_height, fgeom);
+  gtk_style_context_restore (ctx);
 }
 
 MetaFrameLayout*

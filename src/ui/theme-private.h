@@ -954,11 +954,6 @@ GdkPixbuf* meta_theme_load_image (MetaTheme  *theme,
                                   guint       size_of_theme_icons,
                                   GError    **error);
 
-void meta_theme_render_background (GtkStyleContext *style,
-                                   cairo_t         *cr,
-                                   MetaFrameFlags   flags,
-                                   const MetaFrameGeometry *fgeom);
-
 void meta_theme_draw_frame_with_style (MetaTheme              *theme,
                                        GtkStyleContext        *style_gtk,
                                        cairo_t                *cr,

@@ -400,18 +400,8 @@ meta_ui_render_background (MetaUI  *ui,
                            Window   xwindow,
                            cairo_t *cr)
 {
-  MetaUIFrame *frame;
-  MetaFrameGeometry fgeom;
-  MetaFrameFlags flags;
-
-  frame = meta_ui_lookup_window (ui, xwindow);
-
-  meta_core_get (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow,
-                 META_CORE_GET_FRAME_FLAGS, &flags,
-                 META_CORE_GET_END);
-
-  meta_uiframe_calc_geometry (frame, &fgeom);
-  meta_theme_render_background (frame->tv->style_context, cr, flags, &fgeom);
+  MetaUIFrame *frame = meta_ui_lookup_window (ui, xwindow);
+  meta_uiframe_paint (frame, cr);
 }
 
 Window

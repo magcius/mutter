@@ -97,4 +97,7 @@ void meta_uiframe_attach_style (MetaUIFrame *frame);
 void meta_uiframe_calc_geometry (MetaUIFrame       *frame,
                                  MetaFrameGeometry *fgeom);
 
+void meta_uiframe_paint (MetaUIFrame  *frame,
+                         cairo_t      *cr);
+
 #endif

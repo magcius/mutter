@@ -542,7 +542,7 @@ subtract_client_area (cairo_region_t *region,
   cairo_region_destroy (tmp_region);
 }
 
-static void
+void
 meta_uiframe_paint (MetaUIFrame  *frame,
                     cairo_t      *cr)
 {
@@ -553,6 +553,21 @@ meta_uiframe_paint (MetaUIFrame  *frame,
   int w, h;
   MetaButtonLayout button_layout;
   Display *display;
+  cairo_region_t *region;
+  cairo_rectangle_int_t clip;
+
+  gdk_cairo_get_clip_rectangle (cr, &clip);
+
+  region = cairo_region_create_rectangle (&clip);
+
+  clip_to_screen (region, frame);
+  subtract_client_area (region, frame);
+
+  if (cairo_region_num_rectangles (region) == 0)
+    goto out;
+
+  gdk_cairo_region (cr, region);
+  cairo_clip (cr);
 
   display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
 
@@ -576,43 +591,25 @@ meta_uiframe_paint (MetaUIFrame  *frame,
                                     &button_layout,
                                     NULL,
                                     mini_icon, icon);
+
+  GTK_WIDGET_CLASS (meta_uiframe_parent_class)->draw (GTK_WIDGET (frame), cr);
+
+ out:
+  cairo_region_destroy (region);
 }
 
 static gboolean
 meta_uiframe_draw (GtkWidget *widget,
                    cairo_t   *cr)
 {
-  MetaUIFrame *frame;
-  cairo_region_t *region;
-  cairo_rectangle_int_t clip;
-
-  frame = META_UIFRAME (widget);
-  gdk_cairo_get_clip_rectangle (cr, &clip);
-
-  region = cairo_region_create_rectangle (&clip);
-
-  clip_to_screen (region, frame);
-  subtract_client_area (region, frame);
-
-  if (cairo_region_num_rectangles (region) == 0)
-    goto out;
-
-  gdk_cairo_region (cr, region);
-  cairo_clip (cr);
-
   cairo_save (cr);
   cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
   cairo_set_source_rgba (cr, 1, 1, 1, 1);
   cairo_paint (cr);
   cairo_restore (cr);
 
-  meta_uiframe_paint (frame, cr);
+  meta_uiframe_paint (META_UIFRAME (widget), cr);
 
-  GTK_WIDGET_CLASS (meta_uiframe_parent_class)->draw (widget, cr);
-
- out:
-  cairo_region_destroy (region);
-  
   return TRUE;
 }
 

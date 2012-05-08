@@ -75,11 +75,14 @@ struct _MetaUIFrame
 
   Window xwindow;
   GdkWindow *window;
-  MetaThemeVariant *tv;
   MetaFrameControl prelit_control;
 
   GtkWidget *label;
   GtkWidget *container;
+
+  MetaTheme *theme;
+  GtkStyleProvider *provider;
+  char *variant;
 };
 
 struct _MetaUIFrameClass

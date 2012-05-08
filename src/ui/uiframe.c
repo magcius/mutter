@@ -84,24 +84,47 @@ meta_uiframe_init (MetaUIFrame *frame)
 void
 meta_uiframe_attach_style (MetaUIFrame *frame)
 {
+  char *theme_name;
   char *variant = NULL;
+  GtkStyleContext *style_context;
+  GtkSettings *settings;
+
+  frame->theme = meta_theme_get_current ();
 
   meta_core_get (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()),
                  frame->xwindow,
                  META_CORE_GET_THEME_VARIANT, &variant,
                  META_CORE_GET_END);
 
-  /* This is somewhat dirty. We don't use the style context
-   * associated with the widget when drawing, we just use it
-   * to invalidate it, which will cause style-changed to be
-   * emitted. */
-  gtk_style_context_invalidate (gtk_widget_get_style_context (GTK_WIDGET (frame)));
+  settings = gtk_widget_get_settings (GTK_WIDGET (frame));
+  g_object_get (settings,
+                "gtk-theme-name", &theme_name,
+                NULL);
 
-  if (frame->tv != NULL && g_strcmp0 (frame->tv->variant, variant) == 0)
+  /* XXX - what to do with no theme name? */
+  if (theme_name == NULL || *theme_name == '\0')
     return;
 
-  frame->tv = meta_theme_get_variant (meta_theme_get_current (),
-                                      variant);
+  style_context = gtk_widget_get_style_context (GTK_WIDGET (frame));
+
+  gtk_style_context_invalidate (style_context);
+
+  if (g_strcmp0 (frame->variant, variant) == 0)
+    return;
+
+  g_free (frame->variant);
+  frame->variant = g_strdup (variant);
+
+  /* This is a little silly. We have to keep the provider around,
+   * as GTK+ doesn't allow us to do our own thing. */
+  if (frame->provider != NULL)
+    gtk_style_context_remove_provider (style_context, frame->provider);
+
+  frame->provider = GTK_STYLE_PROVIDER (gtk_css_provider_get_named (theme_name, variant));
+
+  if (frame->provider != NULL)
+    gtk_style_context_add_provider (style_context, frame->provider,
+                                    GTK_STYLE_PROVIDER_PRIORITY_THEME);
 }
 
 void
@@ -122,8 +145,8 @@ meta_uiframe_calc_geometry (MetaUIFrame       *frame,
 
   meta_prefs_get_button_layout (&button_layout);
   
-  meta_theme_calc_geometry (frame->tv->theme,
-                            frame->tv->style_context,
+  meta_theme_calc_geometry (frame->theme,
+                            gtk_widget_get_style_context (GTK_WIDGET (frame)),
                             type,
                             flags,
                             width, height,
@@ -529,8 +552,9 @@ subtract_client_area (cairo_region_t *region,
                  META_CORE_GET_CLIENT_WIDTH, &area.width,
                  META_CORE_GET_CLIENT_HEIGHT, &area.height,
                  META_CORE_GET_END);
-  meta_theme_get_frame_borders (frame->tv->theme,
-                                frame->tv->style_context,
+
+  meta_theme_get_frame_borders (frame->theme,
+                                gtk_widget_get_style_context (GTK_WIDGET (frame)),
                                 type, flags,
                                 &borders);
 
@@ -582,8 +606,8 @@ meta_uiframe_paint (MetaUIFrame  *frame,
 
   meta_prefs_get_button_layout (&button_layout);
 
-  meta_theme_draw_frame_with_style (frame->tv->theme,
-                                    frame->tv->style_context,
+  meta_theme_draw_frame_with_style (frame->theme,
+                                    gtk_widget_get_style_context (GTK_WIDGET (frame)),
                                     cr,
                                     type,
                                     flags,

@@ -2981,6 +2981,9 @@ meta_spew_event (MetaDisplay *display,
   if (event->type == Expose || event->type == MotionNotify ||
       event->type == NoExpose)
     return;
+
+  if (event->type == meta_display_get_damage_event_base (display))
+    return;
       
   switch (event->type)
     {

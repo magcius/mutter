@@ -57,39 +57,144 @@ meta_uiframe_finalize (GObject *obj)
 }
 
 static void
-close_button_clicked (GtkWidget *widget,
-                      gpointer   user_data)
-{
-  MetaUIFrame *frame = META_UIFRAME (user_data);
-  Display *display = GDK_DISPLAY_XDISPLAY (gtk_widget_get_display (GTK_WIDGET (frame)));
-
-  meta_core_delete (display, frame->xwindow, gtk_get_current_event_time ());
-}
-
-static void
 meta_uiframe_init (MetaUIFrame *frame)
 {
-  GtkWidget *container, *label, *close;
+  GtkWidget *container, *label;
 
   frame->container = container = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   frame->label = label = gtk_label_new ("");
 
-  /* FIXME: respect button layout */
-  close = gtk_button_new_with_label ("X");
-  g_signal_connect (close, "clicked", G_CALLBACK (close_button_clicked), frame);
-
   gtk_container_add (GTK_CONTAINER (frame), container);
   gtk_container_add (GTK_CONTAINER (container), frame->label);
-  gtk_container_add (GTK_CONTAINER (container), close);
 
   gtk_widget_set_hexpand (container, TRUE);
   gtk_widget_set_hexpand (label, TRUE);
   gtk_widget_set_halign (label, GTK_ALIGN_CENTER);
   gtk_widget_set_valign (label, GTK_ALIGN_START);
-  gtk_widget_set_halign (close, GTK_ALIGN_END);
-  gtk_widget_set_valign (close, GTK_ALIGN_START);
 
   gtk_widget_show_all (GTK_WIDGET (container));
+}
+
+static char *
+button_label (MetaButtonFunction func)
+{
+  switch (func)
+    {
+    case META_BUTTON_FUNCTION_MENU:
+      return "Menu";
+    case META_BUTTON_FUNCTION_MINIMIZE:
+      return "Minimize";
+    case META_BUTTON_FUNCTION_MAXIMIZE:
+      return "Maximize";
+    case META_BUTTON_FUNCTION_CLOSE:
+      return "Close";
+    case META_BUTTON_FUNCTION_SHADE:
+      return "Shade";
+    case META_BUTTON_FUNCTION_ABOVE:
+      return "Above";
+    case META_BUTTON_FUNCTION_STICK:
+      return "Stick";
+    case META_BUTTON_FUNCTION_UNSHADE:
+      return "Unshade";
+    case META_BUTTON_FUNCTION_UNABOVE:
+      return "Unabove";
+    case META_BUTTON_FUNCTION_UNSTICK:
+      return "Unstick";
+    default:
+      g_assert_not_reached ();
+    }
+}
+
+static gboolean
+button_allowed (MetaFrameFlags     flags,
+                MetaButtonFunction func)
+{
+  switch (func)
+    {
+    case META_BUTTON_FUNCTION_CLOSE:
+      return (flags & META_FRAME_ALLOWS_DELETE) != 0;
+    case META_BUTTON_FUNCTION_MINIMIZE:
+      return (flags & META_FRAME_ALLOWS_MINIMIZE) != 0;
+    case META_BUTTON_FUNCTION_MAXIMIZE:
+      return (flags & META_FRAME_ALLOWS_MAXIMIZE) != 0;
+    case META_BUTTON_FUNCTION_MENU:
+      return (flags & META_FRAME_ALLOWS_MENU) != 0;
+    case META_BUTTON_FUNCTION_SHADE:
+      return (flags & META_FRAME_ALLOWS_SHADE) != 0;
+    default:
+      return TRUE;
+    }
+}
+
+static void
+button_clicked (GtkWidget *widget,
+                gpointer   user_data)
+{
+  MetaUIFrame *frame = META_UIFRAME (user_data);
+  Display *display = GDK_DISPLAY_XDISPLAY (gtk_widget_get_display (GTK_WIDGET (frame)));
+  MetaButtonFunction func = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (widget), "button-function"));
+  guint32 timestamp = gtk_get_current_event_time ();
+
+  switch (func)
+    {
+    case META_BUTTON_FUNCTION_CLOSE:
+      meta_core_delete (display, frame->xwindow, timestamp);
+    default:
+      /* XXX */
+      g_assert_not_reached ();
+    }
+}
+
+static void
+build_buttons (MetaUIFrame        *frame,
+               MetaFrameFlags      flags,
+               MetaButtonFunction *layout,
+               GtkAlign            align)
+{
+  int i;
+
+  for (i = 0; i < MAX_BUTTONS_PER_CORNER; i++)
+    {
+      MetaButtonFunction func = layout[i];
+      GtkWidget *button;
+
+      if (func == META_BUTTON_FUNCTION_LAST)
+        return;
+
+      if (!button_allowed (flags, func))
+        continue;
+
+      button = gtk_button_new_with_label (button_label (func));
+      g_object_set_data (G_OBJECT (button), "button-function", GUINT_TO_POINTER (func));
+      g_signal_connect (button, "clicked", G_CALLBACK (button_clicked), frame);
+
+      gtk_container_add (GTK_CONTAINER (frame->container), button);
+      gtk_widget_set_halign (button, align);
+      gtk_widget_set_valign (button, GTK_ALIGN_START);
+      gtk_widget_show (button);
+    }
+}
+
+static void
+destroy_button (GtkWidget *button,
+                gpointer   user_data)
+{
+  if (GTK_IS_BUTTON (button))
+    gtk_widget_destroy (button);
+}
+
+static void
+refresh_buttons (MetaUIFrame    *frame,
+                 MetaFrameFlags  flags)
+{
+  MetaButtonLayout layout;
+
+  gtk_container_foreach (GTK_CONTAINER (frame->container), destroy_button, NULL);
+
+  meta_prefs_get_button_layout (&layout);
+
+  build_buttons (frame, flags, layout.left_buttons, GTK_ALIGN_START);
+  build_buttons (frame, flags, layout.right_buttons, GTK_ALIGN_END);
 }
 
 /* In order to use a style with a window it has to be attached to that
@@ -105,12 +210,14 @@ meta_uiframe_attach_style (MetaUIFrame *frame)
   char *variant = NULL;
   GtkStyleContext *style_context;
   GtkSettings *settings;
+  MetaFrameFlags flags;
 
   frame->theme = meta_theme_get_current ();
 
   meta_core_get (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()),
                  frame->xwindow,
                  META_CORE_GET_THEME_VARIANT, &variant,
+                 META_CORE_GET_FRAME_FLAGS, &flags,
                  META_CORE_GET_END);
 
   settings = gtk_widget_get_settings (GTK_WIDGET (frame));
@@ -123,6 +230,8 @@ meta_uiframe_attach_style (MetaUIFrame *frame)
     return;
 
   style_context = gtk_widget_get_style_context (GTK_WIDGET (frame));
+
+  refresh_buttons (frame, flags);
 
   gtk_style_context_invalidate (style_context);
 

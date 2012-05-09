@@ -135,13 +135,31 @@ button_clicked (GtkWidget *widget,
   MetaButtonFunction func = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (widget), "button-function"));
   guint32 timestamp = gtk_get_current_event_time ();
 
+  /* XXX: handle un-things -- maybe toggle buttons? */
   switch (func)
     {
     case META_BUTTON_FUNCTION_CLOSE:
       meta_core_delete (display, frame->xwindow, timestamp);
+      break;
+    case META_BUTTON_FUNCTION_MINIMIZE:
+      meta_core_minimize (display, frame->xwindow);
+      break;
+    case META_BUTTON_FUNCTION_MAXIMIZE:
+      /* Focus the window on maximize */
+      meta_core_user_focus (display, frame->xwindow, timestamp);
+      meta_core_maximize (display, frame->xwindow);
+      break;
+    case META_BUTTON_FUNCTION_SHADE:
+      meta_core_shade (display, frame->xwindow, timestamp);
+      break;
+    case META_BUTTON_FUNCTION_ABOVE:
+      meta_core_make_above (display, frame->xwindow);
+      break;
+    case META_BUTTON_FUNCTION_STICK:
+      meta_core_stick (display, frame->xwindow);
+      break;
     default:
-      /* XXX */
-      g_assert_not_reached ();
+      break;
     }
 }
 

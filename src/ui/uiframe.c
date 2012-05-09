@@ -57,20 +57,37 @@ meta_uiframe_finalize (GObject *obj)
 }
 
 static void
+close_button_clicked (GtkWidget *widget,
+                      gpointer   user_data)
+{
+  MetaUIFrame *frame = META_UIFRAME (user_data);
+  Display *display = GDK_DISPLAY_XDISPLAY (gtk_widget_get_display (GTK_WIDGET (frame)));
+
+  meta_core_delete (display, frame->xwindow, gtk_get_current_event_time ());
+}
+
+static void
 meta_uiframe_init (MetaUIFrame *frame)
 {
-  GtkWidget *container, *label;
+  GtkWidget *container, *label, *close;
 
   frame->container = container = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   frame->label = label = gtk_label_new ("");
 
+  /* FIXME: respect button layout */
+  close = gtk_button_new_with_label ("X");
+  g_signal_connect (close, "clicked", G_CALLBACK (close_button_clicked), frame);
+
   gtk_container_add (GTK_CONTAINER (frame), container);
   gtk_container_add (GTK_CONTAINER (container), frame->label);
+  gtk_container_add (GTK_CONTAINER (container), close);
 
   gtk_widget_set_hexpand (container, TRUE);
   gtk_widget_set_hexpand (label, TRUE);
   gtk_widget_set_halign (label, GTK_ALIGN_CENTER);
   gtk_widget_set_valign (label, GTK_ALIGN_START);
+  gtk_widget_set_halign (close, GTK_ALIGN_END);
+  gtk_widget_set_valign (close, GTK_ALIGN_START);
 
   gtk_widget_show_all (GTK_WIDGET (container));
 }
@@ -344,7 +361,7 @@ meta_uiframe_button_press_event (GtkWidget      *widget,
 
   if (meta_core_get_grab_op (display) !=
       META_GRAB_OP_NONE)
-    return FALSE; /* already up to something */  
+    return FALSE; /* already up to something */
 
   if (event->button == 1 &&
            (control == META_FRAME_CONTROL_RESIZE_SE ||
@@ -495,7 +512,7 @@ meta_uiframe_motion_notify_event (GtkWidget      *widget,
   int x, y;
   gdk_window_get_device_position (frame->window, event->device, &x, &y, NULL);
   update_cursor (frame, display, x, y);
-  return TRUE;
+  return FALSE;
 }
 
 static void
@@ -672,7 +689,7 @@ meta_uiframe_enter_notify_event (GtkWidget        *widget,
   MetaUIFrame *frame = META_UIFRAME (widget);
   Display *display = GDK_DISPLAY_XDISPLAY (gdk_window_get_display (event->window));
   update_cursor (frame, display, event->x, event->y);
-  return TRUE;
+  return FALSE;
 }
 
 static gboolean
@@ -682,7 +699,7 @@ meta_uiframe_leave_notify_event (GtkWidget        *widget,
   MetaUIFrame *frame = META_UIFRAME (widget);
   Display *display = GDK_DISPLAY_XDISPLAY (gdk_window_get_display (event->window));
   meta_core_set_screen_cursor (display, frame->xwindow, META_CURSOR_DEFAULT);
-  return TRUE;
+  return FALSE;
 }
 
 #define TOP_RESIZE_HEIGHT 4

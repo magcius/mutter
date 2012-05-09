@@ -35,7 +35,7 @@
                     StructureNotifyMask | SubstructureNotifyMask | \
                     ExposureMask |                                 \
                     ButtonPressMask | ButtonReleaseMask |          \
-                    PointerMotionMask | PointerMotionHintMask |    \
+                    PointerMotionMask |                            \
                     EnterWindowMask | LeaveWindowMask |            \
                     FocusChangeMask |                              \
                     ColormapChangeMask)

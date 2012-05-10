@@ -456,6 +456,14 @@ meta_ui_update_frame_style (MetaUI  *ui,
 }
 
 void
+meta_ui_sync_state (MetaUI *ui,
+                    Window xwindow)
+{
+  MetaUIFrame *frame = meta_ui_lookup_window (ui, xwindow);
+  meta_uiframe_sync_state (frame);
+}
+
+void
 meta_ui_queue_frame_draw (MetaUI *ui,
                           Window xwindow)
 {

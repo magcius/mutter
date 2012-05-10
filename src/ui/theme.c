@@ -367,78 +367,6 @@ meta_frame_layout_unref (MetaFrameLayout *layout)
     }
 }
 
-static MetaFrameState
-get_frame_state (MetaFrameFlags flags)
-{
-  switch (flags & (META_FRAME_MAXIMIZED | META_FRAME_SHADED |
-                   META_FRAME_TILED_LEFT | META_FRAME_TILED_RIGHT))
-    {
-    case 0:
-      return META_FRAME_STATE_NORMAL;
-    case META_FRAME_MAXIMIZED:
-      return META_FRAME_STATE_MAXIMIZED;
-    case META_FRAME_TILED_LEFT:
-      return META_FRAME_STATE_TILED_LEFT;
-    case META_FRAME_TILED_RIGHT:
-      return META_FRAME_STATE_TILED_RIGHT;
-    case META_FRAME_SHADED:
-      return META_FRAME_STATE_SHADED;
-    case (META_FRAME_MAXIMIZED | META_FRAME_SHADED):
-      return META_FRAME_STATE_MAXIMIZED_AND_SHADED;
-    case (META_FRAME_TILED_LEFT | META_FRAME_SHADED):
-      return META_FRAME_STATE_TILED_LEFT_AND_SHADED;
-    case (META_FRAME_TILED_RIGHT | META_FRAME_SHADED):
-      return META_FRAME_STATE_TILED_RIGHT_AND_SHADED;
-    default:
-      g_assert_not_reached ();
-    }
-  return META_FRAME_STATE_LAST;
-}
-
-static MetaFrameResize
-get_frame_resize (MetaFrameFlags flags)
-{
-  switch (flags & (META_FRAME_ALLOWS_VERTICAL_RESIZE | META_FRAME_ALLOWS_HORIZONTAL_RESIZE))
-    {
-    case 0:
-      return META_FRAME_RESIZE_NONE;
-    case META_FRAME_ALLOWS_VERTICAL_RESIZE:
-      return META_FRAME_RESIZE_VERTICAL;
-    case META_FRAME_ALLOWS_HORIZONTAL_RESIZE:
-      return META_FRAME_RESIZE_HORIZONTAL;
-    case (META_FRAME_ALLOWS_VERTICAL_RESIZE | META_FRAME_ALLOWS_HORIZONTAL_RESIZE):
-      return META_FRAME_RESIZE_BOTH;
-    default:
-      g_assert_not_reached ();
-    }
-  return META_FRAME_RESIZE_LAST;
-}
-
-static void
-sync_style_context (GtkStyleContext *style_context,
-                    MetaFrameType    type,
-                    MetaFrameFlags   flags)
-{
-  GtkStateFlags gtk_flags;
-
-  gtk_flags = GTK_STATE_FLAG_NORMAL;
-
-  if ((flags & META_FRAME_HAS_FOCUS) == 0)
-    gtk_flags |= GTK_STATE_FLAG_BACKDROP;
-
-  gtk_style_context_set_state (style_context, gtk_flags);
-
-  if (type != META_FRAME_TYPE_NORMAL)
-    gtk_style_context_add_class (style_context, meta_frame_type_to_string (type));
-
-  if ((flags & META_FRAME_ALLOWS_HORIZONTAL_RESIZE) != 0)
-    gtk_style_context_add_class (style_context, "no-horizontal-resize");
-  if ((flags & META_FRAME_ALLOWS_VERTICAL_RESIZE) != 0)
-    gtk_style_context_add_class (style_context, "no-vertical-resize");
-
-  gtk_style_context_add_class (style_context, meta_frame_state_to_string (get_frame_state (flags)));
-}
-
 static void
 meta_frame_layout_get_borders (GtkStyleContext       *style_context,
                                MetaFrameFlags         flags,
@@ -4010,8 +3938,6 @@ meta_theme_render_background (GtkStyleContext *style_gtk,
   visible_rect.width = fgeom->width - borders->invisible.left - borders->invisible.right;
   visible_rect.height = fgeom->height - borders->invisible.top - borders->invisible.bottom;
 
-  gtk_style_context_save (style_gtk);
-  sync_style_context (style_gtk, type, flags);
   gtk_render_background (style_gtk, cr,
                          visible_rect.x,
                          visible_rect.y,
@@ -4023,7 +3949,6 @@ meta_theme_render_background (GtkStyleContext *style_gtk,
                     visible_rect.y,
                     visible_rect.width,
                     visible_rect.height);
-  gtk_style_context_restore (style_gtk);
 }
 
 static void
@@ -4548,8 +4473,8 @@ theme_get_style (MetaTheme     *theme,
   if (style_set == NULL)
     return NULL;
 
-  state = get_frame_state (flags);
-  resize = get_frame_resize (flags);
+  state = META_FRAME_STATE_NORMAL;
+  resize = META_FRAME_RESIZE_BOTH;
   
   /* re invert the styles used for focus/unfocussed while flashing a frame */
   if (((flags & META_FRAME_HAS_FOCUS) && !(flags & META_FRAME_IS_FLASHING))
@@ -4587,9 +4512,6 @@ meta_theme_draw_frame_with_style (MetaTheme              *theme,
   if (style == NULL)
     return;
 
-  gtk_style_context_save (style_gtk);
-  sync_style_context (style_gtk, type, flags);
-
   meta_frame_layout_calc_geometry (style_gtk, flags, type,
                                    client_width, client_height,
                                    &fgeom);
@@ -4603,8 +4525,6 @@ meta_theme_draw_frame_with_style (MetaTheme              *theme,
                                     client_width, client_height,
                                     button_states,
                                     mini_icon, icon);
-
-  gtk_style_context_restore (style_gtk);
 }
 
 void
@@ -4617,11 +4537,7 @@ meta_theme_get_frame_borders (MetaTheme        *theme,
   g_return_if_fail (type < META_FRAME_TYPE_LAST);
 
   meta_frame_borders_clear (borders);
-
-  gtk_style_context_save (style_context);
-  sync_style_context (style_context, type, flags);
   meta_frame_layout_get_borders (style_context, flags, type, borders);
-  gtk_style_context_restore (style_context);
 }
 
 void
@@ -4636,10 +4552,7 @@ meta_theme_calc_geometry (MetaTheme              *theme,
 {
   g_return_if_fail (type < META_FRAME_TYPE_LAST);
 
-  gtk_style_context_save (ctx);
-  sync_style_context (ctx, type, flags);
   meta_frame_layout_calc_geometry (ctx, flags, type, client_width, client_height, fgeom);
-  gtk_style_context_restore (ctx);
 }
 
 MetaFrameLayout*

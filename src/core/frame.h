@@ -54,7 +54,6 @@ struct _MetaFrame
 
 void     meta_window_ensure_frame           (MetaWindow *window);
 void     meta_window_destroy_frame          (MetaWindow *window);
-void     meta_frame_queue_draw              (MetaFrame  *frame);
 
 MetaFrameFlags meta_frame_get_flags   (MetaFrame *frame);
 Window         meta_frame_get_xwindow (MetaFrame *frame);
@@ -73,9 +72,6 @@ gboolean meta_frame_sync_to_window (MetaFrame         *frame,
 
 void meta_frame_set_screen_cursor (MetaFrame	*frame,
 				   MetaCursor	cursor);
+void meta_frame_sync_state (MetaFrame *frame);
 
 #endif
-
-
-
-

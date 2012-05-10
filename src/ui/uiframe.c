@@ -710,6 +710,98 @@ subtract_client_area (cairo_region_t *region,
   cairo_region_destroy (tmp_region);
 }
 
+static MetaFrameState
+get_frame_state (MetaFrameFlags flags)
+{
+  switch (flags & (META_FRAME_MAXIMIZED | META_FRAME_SHADED |
+                   META_FRAME_TILED_LEFT | META_FRAME_TILED_RIGHT))
+    {
+    case 0:
+      return META_FRAME_STATE_NORMAL;
+    case META_FRAME_MAXIMIZED:
+      return META_FRAME_STATE_MAXIMIZED;
+    case META_FRAME_TILED_LEFT:
+      return META_FRAME_STATE_TILED_LEFT;
+    case META_FRAME_TILED_RIGHT:
+      return META_FRAME_STATE_TILED_RIGHT;
+    case META_FRAME_SHADED:
+      return META_FRAME_STATE_SHADED;
+    case (META_FRAME_MAXIMIZED | META_FRAME_SHADED):
+      return META_FRAME_STATE_MAXIMIZED_AND_SHADED;
+    case (META_FRAME_TILED_LEFT | META_FRAME_SHADED):
+      return META_FRAME_STATE_TILED_LEFT_AND_SHADED;
+    case (META_FRAME_TILED_RIGHT | META_FRAME_SHADED):
+      return META_FRAME_STATE_TILED_RIGHT_AND_SHADED;
+    default:
+      g_assert_not_reached ();
+    }
+  return META_FRAME_STATE_LAST;
+}
+
+static MetaFrameResize
+get_frame_resize (MetaFrameFlags flags)
+{
+  switch (flags & (META_FRAME_ALLOWS_VERTICAL_RESIZE | META_FRAME_ALLOWS_HORIZONTAL_RESIZE))
+    {
+    case 0:
+      return META_FRAME_RESIZE_NONE;
+    case META_FRAME_ALLOWS_VERTICAL_RESIZE:
+      return META_FRAME_RESIZE_VERTICAL;
+    case META_FRAME_ALLOWS_HORIZONTAL_RESIZE:
+      return META_FRAME_RESIZE_HORIZONTAL;
+    case (META_FRAME_ALLOWS_VERTICAL_RESIZE | META_FRAME_ALLOWS_HORIZONTAL_RESIZE):
+      return META_FRAME_RESIZE_BOTH;
+    default:
+      g_assert_not_reached ();
+    }
+  return META_FRAME_RESIZE_LAST;
+}
+
+static void
+style_context_remove_all_classes (GtkStyleContext *context)
+{
+  GList *l, *classes = gtk_style_context_list_classes (context);
+  for (l = classes; l != NULL; l = l->next)
+    gtk_style_context_remove_class (context, l->data);
+  g_list_free (classes);
+}
+
+void
+meta_uiframe_sync_state (MetaUIFrame *frame)
+{
+  GtkWidget *widget = GTK_WIDGET (frame);
+  GtkStateFlags gtk_flags;
+  GtkStyleContext *style_context;
+  MetaFrameType type;
+  MetaFrameFlags flags;
+
+  meta_core_get (GDK_DISPLAY_XDISPLAY (gtk_widget_get_display (widget)),
+                 frame->xwindow,
+                 META_CORE_GET_FRAME_FLAGS, &flags,
+                 META_CORE_GET_FRAME_TYPE, &type,
+                 META_CORE_GET_END);
+
+  gtk_flags = GTK_STATE_FLAG_NORMAL;
+
+  if ((flags & META_FRAME_HAS_FOCUS) == 0)
+    gtk_flags |= GTK_STATE_FLAG_BACKDROP;
+
+  gtk_widget_set_state_flags (widget, gtk_flags, TRUE);
+
+  style_context = gtk_widget_get_style_context (widget);
+  style_context_remove_all_classes (style_context);
+
+  if (type != META_FRAME_TYPE_NORMAL)
+    gtk_style_context_add_class (style_context, meta_frame_type_to_string (type));
+
+  if ((flags & META_FRAME_ALLOWS_HORIZONTAL_RESIZE) != 0)
+    gtk_style_context_add_class (style_context, "no-horizontal-resize");
+  if ((flags & META_FRAME_ALLOWS_VERTICAL_RESIZE) != 0)
+    gtk_style_context_add_class (style_context, "no-vertical-resize");
+
+  gtk_style_context_add_class (style_context, meta_frame_state_to_string (get_frame_state (flags)));
+}
+
 void
 meta_uiframe_paint (MetaUIFrame  *frame,
                     cairo_t      *cr)

@@ -97,6 +97,8 @@ void meta_uiframe_set_title (MetaUIFrame *frame,
 
 void meta_uiframe_attach_style (MetaUIFrame *frame);
 
+void meta_uiframe_sync_state (MetaUIFrame *frame);
+
 void meta_uiframe_calc_geometry (MetaUIFrame       *frame,
                                  MetaFrameGeometry *fgeom);
 

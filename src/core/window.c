@@ -3649,10 +3649,6 @@ meta_window_tile (MetaWindow *window)
                                        window,
                                        &old_rect,
                                        &new_rect);
-
-      if (window->frame)
-        meta_ui_queue_frame_draw (window->screen->ui,
-                                  window->frame->xwindow);
     }
   else
     {
@@ -6742,7 +6738,7 @@ meta_window_appears_focused_changed (MetaWindow *window)
   g_object_notify (G_OBJECT (window), "appears-focused");
 
   if (window->frame)
-    meta_frame_queue_draw (window->frame);
+    meta_frame_sync_state (window->frame);
 }
 
 /**
@@ -6911,9 +6907,6 @@ meta_window_notify_focus (MetaWindow *window,
                 g_list_prepend (window->screen->active_workspace->mru_list,
                                 window);
             }
-
-          if (window->frame)
-            meta_frame_queue_draw (window->frame);
 
           meta_error_trap_push (window->display);
           XInstallColormap (window->display->xdisplay,
@@ -8070,6 +8063,9 @@ recalc_window_features (MetaWindow *window)
 
   if (window->has_resize_func != old_has_resize_func)
     g_object_notify (G_OBJECT (window), "resizeable");
+
+  if (window->frame)
+    meta_frame_sync_state (window->frame);
 
   /* FIXME perhaps should ensure if we don't have a shade func,
    * we aren't shaded, etc.

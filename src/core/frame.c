@@ -372,10 +372,10 @@ meta_frame_sync_to_window (MetaFrame *frame,
 }
 
 void
-meta_frame_queue_draw (MetaFrame *frame)
+meta_frame_sync_state (MetaFrame *frame)
 {
-  meta_ui_queue_frame_draw (frame->window->screen->ui,
-                            frame->xwindow);
+  meta_ui_sync_state (frame->window->screen->ui,
+                      frame->xwindow);
 }
 
 void

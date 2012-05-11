@@ -693,43 +693,6 @@ struct _MetaFrameStyle
   guint8 window_background_alpha;
 };
 
-/* Kinds of frame...
- * 
- *  normal ->   noresize / vert only / horz only / both
- *              focused / unfocused
- *  max    ->   focused / unfocused
- *  shaded ->   focused / unfocused
- *  max/shaded -> focused / unfocused
- *
- *  so 4 states with 8 sub-states in one, 2 sub-states in the other 3,
- *  meaning 14 total
- *
- * 14 window states times 7 or 8 window types. Except some
- * window types never get a frame so that narrows it down a bit.
- * 
- */
-typedef enum
-{
-  META_FRAME_STATE_NORMAL,
-  META_FRAME_STATE_MAXIMIZED,
-  META_FRAME_STATE_TILED_LEFT,
-  META_FRAME_STATE_TILED_RIGHT,
-  META_FRAME_STATE_SHADED,
-  META_FRAME_STATE_MAXIMIZED_AND_SHADED,
-  META_FRAME_STATE_TILED_LEFT_AND_SHADED,
-  META_FRAME_STATE_TILED_RIGHT_AND_SHADED,
-  META_FRAME_STATE_LAST
-} MetaFrameState;
-
-typedef enum
-{
-  META_FRAME_RESIZE_NONE,
-  META_FRAME_RESIZE_VERTICAL,
-  META_FRAME_RESIZE_HORIZONTAL,
-  META_FRAME_RESIZE_BOTH,
-  META_FRAME_RESIZE_LAST
-} MetaFrameResize;
-
 typedef enum
 {
   META_FRAME_FOCUS_NO,

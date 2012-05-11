@@ -147,8 +147,6 @@ libmutter_la_SOURCES =				\
 	meta/theme.h				\
 	ui/theme-private.h			\
 	ui/ui.c					\
-	meta/preview-widget.h			\
-	ui/preview-widget.c			\
 	$(mutter_built_sources)
 
 libmutter_la_LDFLAGS = -no-undefined
@@ -192,11 +190,6 @@ libmutterinclude_HEADERS =			\
 	$(libmutterinclude_base_headers)	\
 	$(libmutterinclude_extra_headers)
 
-mutter_theme_viewer_SOURCES=  \
-	ui/theme-viewer.c
-
-bin_PROGRAMS=mutter mutter-theme-viewer
-
 mutter_SOURCES = core/mutter.c
 mutter_LDADD = $(MUTTER_LIBS) libmutter.la
 
@@ -232,8 +225,6 @@ Meta-$(api_version).gir: libmutter.la
 @META_GIR@_SCANNERFLAGS = --warn-all --warn-error
 
 endif
-
-mutter_theme_viewer_LDADD= $(MUTTER_LIBS) libmutter.la
 
 testboxes_SOURCES = core/testboxes.c
 testgradient_SOURCES = ui/testgradient.c

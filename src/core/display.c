@@ -2606,8 +2606,6 @@ event_callback (XEvent   *event,
                        display->atom__MUTTER_RELOAD_THEME_MESSAGE)
                 {
                   meta_verbose ("Received reload theme request\n");
-                  meta_ui_set_current_theme (meta_prefs_get_theme (),
-                                             TRUE);
                   meta_display_retheme_all ();
                 }
               else if (event->xclient.message_type ==

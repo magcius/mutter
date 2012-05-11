@@ -31,11 +31,8 @@
 #include <meta/util.h>
 #include "core.h"
 #include "menu.h"
-#include <meta/theme.h>
 #include <meta/prefs.h>
 #include "ui.h"
-
-#include "theme-private.h"
 
 #ifdef HAVE_SHAPE
 #include <X11/extensions/shape.h>
@@ -230,8 +227,6 @@ meta_uiframe_attach_style (MetaUIFrame *frame)
   GtkSettings *settings;
   MetaFrameFlags flags;
 
-  frame->theme = meta_theme_get_current ();
-
   meta_core_get (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()),
                  frame->xwindow,
                  META_CORE_GET_THEME_VARIANT, &variant,
@@ -272,45 +267,90 @@ meta_uiframe_attach_style (MetaUIFrame *frame)
 }
 
 void
-meta_uiframe_calc_geometry (MetaUIFrame       *frame,
-                            MetaFrameGeometry *fgeom)
+meta_uiframe_get_frame_borders (MetaUIFrame      *frame,
+                                MetaFrameBorders *borders)
 {
-  int width, height;
+  GtkWidget *widget = GTK_WIDGET (frame);
+  GtkStyleContext *style_context = gtk_widget_get_style_context (widget);
+  int draggable_borders;
+  GtkBorder padding;
   MetaFrameFlags flags;
   MetaFrameType type;
-  MetaButtonLayout button_layout;
-  
-  meta_core_get (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow,
-                 META_CORE_GET_CLIENT_WIDTH, &width,
-                 META_CORE_GET_CLIENT_HEIGHT, &height,
+
+  meta_core_get (GDK_DISPLAY_XDISPLAY (gtk_widget_get_display (widget)),
+                 frame->xwindow,
                  META_CORE_GET_FRAME_FLAGS, &flags,
                  META_CORE_GET_FRAME_TYPE, &type,
                  META_CORE_GET_END);
 
-  meta_prefs_get_button_layout (&button_layout);
-  
-  meta_theme_calc_geometry (frame->theme,
-                            gtk_widget_get_style_context (GTK_WIDGET (frame)),
-                            type,
-                            flags,
-                            width, height,
-                            &button_layout,
-                            fgeom);
+  meta_frame_borders_clear (borders);
+
+  /* For a full-screen window, we don't have any borders, visible or not. */
+  if (flags & META_FRAME_FULLSCREEN)
+    return;
+
+  gtk_style_context_get_border (style_context,
+                                gtk_style_context_get_state (style_context),
+                                &borders->visible);
+
+  gtk_style_context_get_padding (style_context,
+                                 gtk_style_context_get_state (style_context),
+                                 &padding);
+
+  borders->visible.left += padding.left;
+  borders->visible.right += padding.right;
+  borders->visible.top += padding.top;
+  borders->visible.bottom += padding.bottom;
+
+  draggable_borders = meta_prefs_get_draggable_border_width ();
+
+  if (flags & META_FRAME_ALLOWS_HORIZONTAL_RESIZE)
+    {
+      borders->invisible.left   = MAX (0, draggable_borders - borders->visible.left);
+      borders->invisible.right  = MAX (0, draggable_borders - borders->visible.right);
+    }
+
+  if (flags & META_FRAME_ALLOWS_VERTICAL_RESIZE)
+    {
+      borders->invisible.bottom = MAX (0, draggable_borders - borders->visible.bottom);
+
+      /* borders.visible.top is the height of the *title bar*. We can't do the same
+       * algorithm here, titlebars are expectedly much bigger. Just subtract a couple
+       * pixels to get a proper feel. */
+      if (type != META_FRAME_TYPE_ATTACHED)
+        borders->invisible.top    = MAX (0, draggable_borders - 2);
+    }
+
+  borders->total.left   = borders->invisible.left   + borders->visible.left;
+  borders->total.right  = borders->invisible.right  + borders->visible.right;
+  borders->total.bottom = borders->invisible.bottom + borders->visible.bottom;
+  borders->total.top    = borders->invisible.top    + borders->visible.top;
 }
 
-/* The client rectangle surrounds client window; it subtracts both
- * the visible and invisible borders from the frame window's size.
- */
 static void
-get_client_rect (MetaFrameGeometry     *fgeom,
-                 int                    window_width,
-                 int                    window_height,
-                 cairo_rectangle_int_t *rect)
+meta_uiframe_calc_geometry (MetaUIFrame      *frame,
+                            MetaFrameBorders *borders,
+                            int              *width,
+                            int              *height)
 {
-  rect->x = fgeom->borders.total.left;
-  rect->y = fgeom->borders.total.top;
-  rect->width = window_width - fgeom->borders.total.right - rect->x;
-  rect->height = window_height - fgeom->borders.total.bottom - rect->y;
+  GtkWidget *widget = GTK_WIDGET (frame);
+  MetaFrameFlags flags;
+  int client_width, client_height;
+
+  meta_core_get (GDK_DISPLAY_XDISPLAY (gtk_widget_get_display (widget)),
+                 frame->xwindow,
+                 META_CORE_GET_FRAME_FLAGS, &flags,
+                 META_CORE_GET_CLIENT_WIDTH, &client_width,
+                 META_CORE_GET_CLIENT_HEIGHT, &client_height,
+                 META_CORE_GET_END);
+
+  meta_uiframe_get_frame_borders (frame, borders);
+
+  if (width != NULL)
+    *width = client_width + borders->total.left + borders->total.right;
+
+  if (height != NULL)
+    *height = ((flags & META_FRAME_SHADED) ? 0: client_height) + borders->total.top + borders->total.bottom;
 }
 
 void
@@ -670,25 +710,10 @@ clip_region_to_visible_frame_border (cairo_region_t *region,
 {
   cairo_rectangle_int_t area;
   cairo_region_t *frame_border;
-  MetaFrameFlags flags;
-  MetaFrameType type;
   MetaFrameBorders borders;
-  Display *display;
   int frame_width, frame_height;
-  
-  display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
 
-  meta_core_get (display, frame->xwindow,
-                 META_CORE_GET_FRAME_FLAGS, &flags,
-                 META_CORE_GET_FRAME_TYPE, &type,
-                 META_CORE_GET_FRAME_WIDTH, &frame_width,
-                 META_CORE_GET_FRAME_HEIGHT, &frame_height,
-                 META_CORE_GET_END);
-
-  meta_theme_get_frame_borders (frame->theme,
-                                gtk_widget_get_style_context (GTK_WIDGET (frame)),
-                                type, flags,
-                                &borders);
+  meta_uiframe_calc_geometry (frame, &borders, &frame_width, &frame_height);
 
   /* Visible frame rect */
   area.x = borders.invisible.left;
@@ -807,15 +832,13 @@ void
 meta_uiframe_paint (MetaUIFrame  *frame,
                     cairo_t      *cr)
 {
-  MetaFrameFlags flags;
-  MetaFrameType type;
-  GdkPixbuf *mini_icon;
-  GdkPixbuf *icon;
-  int w, h;
-  MetaButtonLayout button_layout;
-  Display *display;
+  GtkWidget *widget = GTK_WIDGET (frame);
   cairo_region_t *region;
   cairo_rectangle_int_t clip;
+  GdkRectangle visible_rect;
+  MetaFrameBorders borders;
+  int width, height;
+  GtkStyleContext *style_context;
 
   gdk_cairo_get_clip_rectangle (cr, &clip);
 
@@ -833,30 +856,26 @@ meta_uiframe_paint (MetaUIFrame  *frame,
   cairo_paint (cr);
   cairo_restore (cr);
 
-  display = GDK_DISPLAY_XDISPLAY (gdk_display_get_default ());
+  visible_rect.x = borders.invisible.left;
+  visible_rect.y = borders.invisible.top;
+  visible_rect.width = width - borders.invisible.left - borders.invisible.right;
+  visible_rect.height = height - borders.invisible.top - borders.invisible.bottom;
 
-  meta_core_get (display, frame->xwindow,
-                 META_CORE_GET_FRAME_FLAGS, &flags,
-                 META_CORE_GET_FRAME_TYPE, &type,
-                 META_CORE_GET_MINI_ICON, &mini_icon,
-                 META_CORE_GET_ICON, &icon,
-                 META_CORE_GET_CLIENT_WIDTH, &w,
-                 META_CORE_GET_CLIENT_HEIGHT, &h,
-                 META_CORE_GET_END);
+  style_context = gtk_widget_get_style_context (widget);
 
-  meta_prefs_get_button_layout (&button_layout);
+  gtk_render_background (style_context, cr,
+                         visible_rect.x,
+                         visible_rect.y,
+                         visible_rect.width,
+                         visible_rect.height);
 
-  meta_theme_draw_frame_with_style (frame->theme,
-                                    gtk_widget_get_style_context (GTK_WIDGET (frame)),
-                                    cr,
-                                    type,
-                                    flags,
-                                    w, h,
-                                    &button_layout,
-                                    NULL,
-                                    mini_icon, icon);
+  gtk_render_frame (style_context, cr,
+                    visible_rect.x,
+                    visible_rect.y,
+                    visible_rect.width,
+                    visible_rect.height);
 
-  GTK_WIDGET_CLASS (meta_uiframe_parent_class)->draw (GTK_WIDGET (frame), cr);
+  GTK_WIDGET_CLASS (meta_uiframe_parent_class)->draw (widget, cr);
 
  out:
   cairo_region_destroy (region);
@@ -881,12 +900,8 @@ meta_uiframe_size_allocate (GtkWidget     *widget,
 
   if (child && gtk_widget_get_visible (child))
     {
-      MetaFrameGeometry fgeom;
       GtkAllocation child_allocation;
       GtkBorder *invisible;
-
-      meta_uiframe_calc_geometry (frame, &fgeom);
-      invisible = &(fgeom.borders.invisible);
 
       child_allocation = *allocation;
       child_allocation.x += invisible->left;
@@ -924,15 +939,22 @@ static MetaFrameControl
 get_control (MetaUIFrame *frame,
              int x, int y)
 {
-  MetaFrameGeometry fgeom;
-  MetaFrameFlags flags;
-  MetaFrameType type;
   gboolean has_vert, has_horiz;
   gboolean has_north_resize;
   cairo_rectangle_int_t client;
+  MetaFrameBorders borders;
+  MetaFrameType type;
+  MetaFrameFlags flags;
 
-  meta_uiframe_calc_geometry (frame, &fgeom);
-  get_client_rect (&fgeom, fgeom.width, fgeom.height, &client);
+  meta_core_get (GDK_DISPLAY_XDISPLAY (gtk_widget_get_display (GTK_WIDGET (frame))),
+                 frame->xwindow,
+                 META_CORE_GET_FRAME_FLAGS, &flags,
+                 META_CORE_GET_FRAME_TYPE, &type,
+                 META_CORE_GET_END);
+
+  meta_uiframe_calc_geometry (frame, &borders, &client.width, &client.height);
+  client.x = borders.total.left;
+  client.y = borders.total.right;
 
   if (POINT_IN_RECT (x, y, client))
     return META_FRAME_CONTROL_CLIENT_AREA;
@@ -951,8 +973,8 @@ get_control (MetaUIFrame *frame,
    * in case of overlap.
    */
 
-  if (y >= (fgeom.height - fgeom.borders.total.bottom * CORNER_SIZE_MULT) &&
-      x >= (fgeom.width - fgeom.borders.total.right * CORNER_SIZE_MULT))
+  if (y >= (client.height - borders.total.bottom * CORNER_SIZE_MULT) &&
+      x >= (client.width - borders.total.right * CORNER_SIZE_MULT))
     {
       if (has_vert && has_horiz)
         return META_FRAME_CONTROL_RESIZE_SE;
@@ -961,8 +983,8 @@ get_control (MetaUIFrame *frame,
       else if (has_horiz)
         return META_FRAME_CONTROL_RESIZE_E;
     }
-  else if (y >= (fgeom.height - fgeom.borders.total.bottom * CORNER_SIZE_MULT) &&
-           x <= fgeom.borders.total.left * CORNER_SIZE_MULT)
+  else if (y >= (client.height - borders.total.bottom * CORNER_SIZE_MULT) &&
+           x <= (borders.total.left * CORNER_SIZE_MULT))
     {
       if (has_vert && has_horiz)
         return META_FRAME_CONTROL_RESIZE_SW;
@@ -971,8 +993,8 @@ get_control (MetaUIFrame *frame,
       else if (has_horiz)
         return META_FRAME_CONTROL_RESIZE_W;
     }
-  else if (y < (fgeom.borders.invisible.top * CORNER_SIZE_MULT) &&
-           x <= (fgeom.borders.total.left * CORNER_SIZE_MULT) && has_north_resize)
+  else if (y < (borders.invisible.top * CORNER_SIZE_MULT) &&
+           x <= (borders.total.left * CORNER_SIZE_MULT) && has_north_resize)
     {
       if (has_vert && has_horiz)
         return META_FRAME_CONTROL_RESIZE_NW;
@@ -981,8 +1003,8 @@ get_control (MetaUIFrame *frame,
       else if (has_horiz)
         return META_FRAME_CONTROL_RESIZE_W;
     }
-  else if (y < (fgeom.borders.invisible.top * CORNER_SIZE_MULT) &&
-           x >= (fgeom.width - fgeom.borders.total.right * CORNER_SIZE_MULT) && has_north_resize)
+  else if (y < (borders.invisible.top * CORNER_SIZE_MULT) &&
+           x >= (client.width - borders.total.right * CORNER_SIZE_MULT) && has_north_resize)
     {
       if (has_vert && has_horiz)
         return META_FRAME_CONTROL_RESIZE_NE;
@@ -991,28 +1013,28 @@ get_control (MetaUIFrame *frame,
       else if (has_horiz)
         return META_FRAME_CONTROL_RESIZE_E;
     }
-  else if (y < (fgeom.borders.invisible.top + TOP_RESIZE_HEIGHT))
+  else if (y < (borders.invisible.top + TOP_RESIZE_HEIGHT))
     {
       if (has_vert && has_north_resize)
         return META_FRAME_CONTROL_RESIZE_N;
     }
-  else if (y >= (fgeom.height - fgeom.borders.total.bottom))
+  else if (y >= (client.height - borders.total.bottom))
     {
       if (has_vert)
         return META_FRAME_CONTROL_RESIZE_S;
     }
-  else if (x <= fgeom.borders.total.left)
+  else if (x <= borders.total.left)
     {
       if (has_horiz)
         return META_FRAME_CONTROL_RESIZE_W;
     }
-  else if (x >= (fgeom.width - fgeom.borders.total.right))
+  else if (x >= (client.width - borders.total.right))
     {
       if (has_horiz)
         return META_FRAME_CONTROL_RESIZE_E;
     }
 
-  if (y >= fgeom.borders.total.top)
+  if (y >= borders.total.top)
     return META_FRAME_CONTROL_NONE;
   else
     return META_FRAME_CONTROL_TITLE;

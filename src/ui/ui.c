@@ -29,7 +29,6 @@
 #include <meta/util.h>
 #include "menu.h"
 #include "core.h"
-#include "theme-private.h"
 
 #include "inlinepixbufs.h"
 
@@ -153,6 +152,7 @@ prefs_changed_callback (MetaPreference pref,
   switch (pref)
     {
     case META_PREF_BUTTON_LAYOUT:
+    case META_PREF_DRAGGABLE_BORDER_WIDTH:
       button_layout_changed ((MetaUI *) data);
       break;
     default:
@@ -230,32 +230,16 @@ meta_ui_get_frame_borders (MetaUI *ui,
                            Window xwindow,
                            MetaFrameBorders *borders)
 {
-  MetaFrameFlags flags;
   MetaUIFrame *frame;
-  MetaFrameType type;
   
   frame = meta_ui_lookup_window (ui, xwindow);
-
-  if (frame == NULL)
-    meta_bug ("No such frame 0x%lx\n", xwindow);
-  
-  meta_core_get (GDK_DISPLAY_XDISPLAY (gdk_display_get_default ()), frame->xwindow,
-                 META_CORE_GET_FRAME_FLAGS, &flags,
-                 META_CORE_GET_FRAME_TYPE, &type,
-                 META_CORE_GET_END);
-
-  g_return_if_fail (type < META_FRAME_TYPE_LAST);
   
   /* We can't get the full geometry, because that depends on
    * the client window size and probably we're being called
    * by the core move/resize code to decide on the client
    * window size
    */
-  meta_theme_get_frame_borders (frame->theme,
-                                gtk_widget_get_style_context (GTK_WIDGET (frame)),
-                                type,
-                                flags,
-                                borders);
+  meta_uiframe_get_frame_borders (frame, borders);
 }
 
 void
@@ -685,20 +669,6 @@ meta_text_property_to_utf8 (Display             *xdisplay,
   g_strfreev (list);
 
   return retval;
-}
-
-void
-meta_ui_set_current_theme (const char *name,
-                           gboolean    force_reload)
-{
-  meta_theme_set_current (name, force_reload);
-  meta_invalidate_default_icons ();
-}
-
-gboolean
-meta_ui_have_a_theme (void)
-{
-  return meta_theme_get_current () != NULL;
 }
 
 static void

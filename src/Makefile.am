@@ -142,10 +142,6 @@ libmutter_la_SOURCES =				\
 	ui/tabpopup.h				\
 	ui/tile-preview.c			\
 	ui/tile-preview.h			\
-	ui/theme-parser.c			\
-	ui/theme.c				\
-	meta/theme.h				\
-	ui/theme-private.h			\
 	ui/ui.c					\
 	$(mutter_built_sources)
 
@@ -172,7 +168,6 @@ libmutterinclude_base_headers =		\
 	meta/meta-window-actor.h		\
 	meta/prefs.h				\
 	meta/screen.h				\
-	meta/theme.h				\
 	meta/types.h				\
 	meta/util.h				\
 	meta/window.h				\
@@ -181,7 +176,6 @@ libmutterinclude_base_headers =		\
 # Excluded from scanning for introspection but installed
 # atomnames.h: macros cause problems for scanning process
 libmutterinclude_extra_headers =		\
-	meta/preview-widget.h			\
 	meta/atomnames.h
 
 libmutterincludedir = $(includedir)/mutter/meta

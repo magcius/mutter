@@ -402,3 +402,89 @@ meta_frame_get_xwindow (MetaFrame *frame)
 {
   return frame->xwindow;
 }
+
+/**
+ * meta_frame_type_to_string:
+ *
+ * Converts a frame type enum value to the name string that would
+ * appear in the theme definition file.
+ *
+ * Return value: the string value
+ */
+const char*
+meta_frame_type_to_string (MetaFrameType type)
+{
+  switch (type)
+    {
+    case META_FRAME_TYPE_NORMAL:
+      return "normal";
+    case META_FRAME_TYPE_DIALOG:
+      return "dialog";
+    case META_FRAME_TYPE_MODAL_DIALOG:
+      return "modal_dialog";
+    case META_FRAME_TYPE_UTILITY:
+      return "utility";
+    case META_FRAME_TYPE_MENU:
+      return "menu";
+    case META_FRAME_TYPE_BORDER:
+      return "border";
+    case META_FRAME_TYPE_ATTACHED:
+      return "attached";
+#if 0
+    case META_FRAME_TYPE_TOOLBAR:
+      return "toolbar";
+#endif
+    case  META_FRAME_TYPE_LAST:
+      break;
+    }
+
+  return "<unknown>";
+}
+
+const char*
+meta_frame_state_to_string (MetaFrameState state)
+{
+  switch (state)
+    {
+    case META_FRAME_STATE_NORMAL:
+      return "normal";
+    case META_FRAME_STATE_MAXIMIZED:
+      return "maximized";
+    case META_FRAME_STATE_TILED_LEFT:
+      return "tiled_left";
+    case META_FRAME_STATE_TILED_RIGHT:
+      return "tiled_right";
+    case META_FRAME_STATE_SHADED:
+      return "shaded";
+    case META_FRAME_STATE_MAXIMIZED_AND_SHADED:
+      return "maximized_and_shaded";
+    case META_FRAME_STATE_TILED_LEFT_AND_SHADED:
+      return "tiled_left_and_shaded";
+    case META_FRAME_STATE_TILED_RIGHT_AND_SHADED:
+      return "tiled_right_and_shaded";
+    case META_FRAME_STATE_LAST:
+      break;
+    }
+
+  return "<unknown>";
+}
+
+const char*
+meta_frame_resize_to_string (MetaFrameResize resize)
+{
+  switch (resize)
+    {
+    case META_FRAME_RESIZE_NONE:
+      return "none";
+    case META_FRAME_RESIZE_VERTICAL:
+      return "vertical";
+    case META_FRAME_RESIZE_HORIZONTAL:
+      return "horizontal";
+    case META_FRAME_RESIZE_BOTH:
+      return "both";
+    case META_FRAME_RESIZE_LAST:
+      break;
+    }
+
+  return "<unknown>";
+}

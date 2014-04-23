@@ -101,6 +101,9 @@ struct _MetaOutput
   /* Used when changing configuration */
   gboolean is_dirty;
 
+  gboolean is_underscanning;
+  gboolean needs_modeset;
+
   /* The low-level bits used to build the high-level info
      in MetaMonitorInfo
 
@@ -110,7 +113,6 @@ struct _MetaOutput
   */
   gboolean is_primary;
   gboolean is_presentation;
-  gboolean is_underscanning;
 
   gpointer driver_private;
   GDestroyNotify driver_notify;

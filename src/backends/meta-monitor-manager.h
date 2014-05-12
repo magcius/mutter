@@ -101,8 +101,8 @@ struct _MetaOutput
   /* Used when changing configuration */
   gboolean is_dirty;
 
+  gboolean is_default_config;
   gboolean is_underscanning;
-  gboolean needs_modeset;
   int underscan_hborder;
   int underscan_vborder;
 
@@ -212,6 +212,7 @@ struct _MetaOutputInfo {
   gboolean     is_primary;
   gboolean     is_presentation;
   gboolean     is_underscanning;
+  gboolean     is_default_config;
 };
 
 #define META_TYPE_MONITOR_MANAGER            (meta_monitor_manager_get_type ())

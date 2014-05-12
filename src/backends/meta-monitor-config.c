@@ -65,6 +65,7 @@ typedef struct {
   gboolean is_primary;
   gboolean is_presentation;
   gboolean is_underscanning;
+  gboolean is_default_config;
 } MetaOutputConfig;
 
 typedef struct {
@@ -1093,14 +1094,6 @@ find_primary_output (MetaOutput *outputs,
   return best;
 }
 
-static gboolean
-is_hdtv(int width, int height)
-{
-  return (width == 1920 && height == 1080) ||
-         (width == 1440 && height == 1080) ||
-         (width == 1280 && height == 720);
-}
-
 static MetaConfiguration *
 make_default_config (MetaMonitorConfig *self,
                      MetaOutput        *outputs,
@@ -1129,8 +1122,8 @@ make_default_config (MetaMonitorConfig *self,
       ret->outputs[0].refresh_rate = outputs[0].preferred_mode->refresh_rate;
       ret->outputs[0].transform = META_MONITOR_TRANSFORM_NORMAL;
       ret->outputs[0].is_primary = TRUE;
-      ret->outputs[0].is_underscanning = is_hdtv(ret->outputs[0].rect.width,
-                                                 ret->outputs[0].rect.height);
+      ret->outputs[0].is_underscanning = FALSE;
+      ret->outputs[0].is_default_config = TRUE;
 
       return ret;
     }
@@ -1184,6 +1177,7 @@ make_default_config (MetaMonitorConfig *self,
                   ret->outputs[j].transform = META_MONITOR_TRANSFORM_NORMAL;
                   ret->outputs[j].is_primary = FALSE;
                   ret->outputs[j].is_presentation = FALSE;
+                  ret->outputs[j].is_default_config = TRUE;
                 }
             }
 
@@ -1218,6 +1212,7 @@ make_default_config (MetaMonitorConfig *self,
       ret->outputs[i].refresh_rate = output->preferred_mode->refresh_rate;
       ret->outputs[i].transform = META_MONITOR_TRANSFORM_NORMAL;
       ret->outputs[i].is_primary = (output == primary);
+      ret->outputs[i].is_default_config = TRUE;
 
       /* Disable outputs that would go beyond framebuffer limits */
       if (ret->outputs[i].rect.x + ret->outputs[i].rect.width > max_width)
@@ -1337,6 +1332,7 @@ init_config_from_output (MetaOutputConfig *config,
   config->is_primary = output->is_primary;
   config->is_presentation = output->is_presentation;
   config->is_underscanning = output->is_underscanning;
+  config->is_default_config = output->is_default_config;
 }
 
 void
@@ -1876,6 +1872,7 @@ meta_monitor_config_assign_crtcs (MetaConfiguration  *config,
       output_info->is_primary = output_config->is_primary;
       output_info->is_presentation = output_config->is_presentation;
       output_info->is_underscanning = output_config->is_underscanning;
+      output_info->is_default_config = output_config->is_default_config;
 
       g_ptr_array_add (outputs, output_info);
     }

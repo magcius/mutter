@@ -1360,6 +1360,9 @@ meta_monitor_manager_xrandr_handle_xevent (MetaMonitorManagerXrandr *manager_xra
       int current_width, current_height;
       int target_width, target_height;
 
+      if (!output->crtc)
+        continue;
+
       current_width = output->crtc->current_mode->width;
       current_height = output->crtc->current_mode->height;
 

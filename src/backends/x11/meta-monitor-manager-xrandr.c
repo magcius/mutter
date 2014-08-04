@@ -1458,6 +1458,9 @@ meta_monitor_manager_xrandr_handle_xevent (MetaMonitorManagerXrandr *manager_xra
   gboolean new_config;
   unsigned i, j;
   gboolean needs_update = FALSE;
+  int width_mm, height_mm;
+  int screen_width = 0;
+  int screen_height = 0;
 
   if ((event->type - manager_xrandr->rr_event_base) != RRScreenChangeNotify)
     return FALSE;
@@ -1473,6 +1476,8 @@ meta_monitor_manager_xrandr_handle_xevent (MetaMonitorManagerXrandr *manager_xra
 
   manager->serial++;
   meta_monitor_manager_xrandr_read_current (manager);
+
+  XGrabServer (manager_xrandr->xdisplay);
 
   for (i = 0; i < (unsigned)manager->n_outputs; i++)
     {
@@ -1506,10 +1511,7 @@ meta_monitor_manager_xrandr_handle_xevent (MetaMonitorManagerXrandr *manager_xra
               (current_width != mode->width ||
                current_height != mode->height))
             {
-              int width_mm, height_mm;
               Status ok;
-
-              XGrabServer (manager_xrandr->xdisplay);
 
               XRRSetCrtcConfig (manager_xrandr->xdisplay,
                                 manager_xrandr->resources,
@@ -1522,20 +1524,6 @@ meta_monitor_manager_xrandr_handle_xevent (MetaMonitorManagerXrandr *manager_xra
 
               output->crtc->current_mode = mode;
 
-              width_mm = (mode->width / DPI_FALLBACK) * 25.4 + 0.5;
-              height_mm = (mode->height / DPI_FALLBACK) * 25.4 + 0.5;
-
-              XRRSetScreenSize (manager_xrandr->xdisplay,
-                                DefaultRootWindow (manager_xrandr->xdisplay),
-                                mode->width, mode->height,
-                                width_mm, height_mm);
-
-              // The screen size will be updated on the next RRScreenChangeNotify,
-              // but we need the UI to update ASAP.
-              XSync (manager_xrandr->xdisplay, False);
-              manager->screen_width = mode->width;
-              manager->screen_height = mode->height;
-
               /* TODO: Send the list of output IDs for this CRTC */
               ok = XRRSetCrtcConfig (manager_xrandr->xdisplay,
                                      manager_xrandr->resources,
@@ -1545,8 +1533,6 @@ meta_monitor_manager_xrandr_handle_xevent (MetaMonitorManagerXrandr *manager_xra
                                      (XID)mode->mode_id,
                                      meta_monitor_transform_to_xrandr (output->crtc->transform),
                                      (RROutput *)&output->winsys_id, 1);
-
-              XUngrabServer (manager_xrandr->xdisplay);
 
               if (ok != Success)
                 {
@@ -1564,6 +1550,36 @@ meta_monitor_manager_xrandr_handle_xevent (MetaMonitorManagerXrandr *manager_xra
               break;
             }
         }
+
+      if (meta_monitor_transform_is_rotated (output->crtc->transform))
+        {
+          screen_width = MAX (screen_width, output->crtc->rect.x + output->crtc->rect.height);
+          screen_height = MAX (screen_height, output->crtc->rect.y + output->crtc->rect.width);
+        }
+      else
+        {
+          screen_width = MAX (screen_width, output->crtc->rect.x + output->crtc->rect.width);
+          screen_height = MAX (screen_height, output->crtc->rect.y + output->crtc->rect.height);
+        }
+    }
+
+  if (screen_width > 0 && screen_height > 0)
+    {
+      width_mm = (screen_width / DPI_FALLBACK) * 25.4 + 0.5;
+      height_mm = (screen_height / DPI_FALLBACK) * 25.4 + 0.5;
+
+      XRRSetScreenSize (manager_xrandr->xdisplay,
+                        DefaultRootWindow (manager_xrandr->xdisplay),
+                        screen_width, screen_height,
+                        width_mm, height_mm);
+
+      // The screen size will be updated on the next RRScreenChangeNotify,
+      // but we need the UI to update ASAP.
+      XSync (manager_xrandr->xdisplay, False);
+      manager->screen_width = screen_width;
+      manager->screen_height = screen_height;
+
+      XUngrabServer (manager_xrandr->xdisplay);
     }
 
   new_config = manager_xrandr->resources->timestamp >=

@@ -1579,9 +1579,9 @@ meta_monitor_manager_xrandr_handle_xevent (MetaMonitorManagerXrandr *manager_xra
       XSync (manager_xrandr->xdisplay, False);
       manager->screen_width = screen_width;
       manager->screen_height = screen_height;
-
-      XUngrabServer (manager_xrandr->xdisplay);
     }
+
+  XUngrabServer (manager_xrandr->xdisplay);
 
   new_config = manager_xrandr->resources->timestamp >=
     manager_xrandr->resources->configTimestamp;

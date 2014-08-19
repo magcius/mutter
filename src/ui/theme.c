@@ -3950,6 +3950,9 @@ meta_draw_op_draw_with_env (const MetaDrawOp    *op,
           rx = parse_x_position_unchecked (op->data.title.x, env);
           ry = parse_y_position_unchecked (op->data.title.y, env);
 
+          if (meta_get_locale_direction () == META_LOCALE_DIRECTION_RTL)
+            rx = rect.x + rect.width - (rx - rect.x) - env->title_width;
+
           if (op->data.title.ellipsize_width)
             {
               int ellipsize_width;
